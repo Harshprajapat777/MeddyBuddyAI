@@ -1,0 +1,15 @@
+[project]
+name = "MeddyBuddyAI"
+version = "0.1.0"
+description = "Agentic AI healthcare platform — multi-agent orchestrator with medication management, reminders, OCR report analysis, and a predictive digital health twin."
+
+[plugins.byllm.model]
+default_model = "claude-sonnet-4-6"
+api_key = "${ANTHROPIC_API_KEY}"
+
+[plugins.byllm.call_params]
+temperature = 0.7
+max_tokens = 2000
+
+[serve]
+port = 8000
