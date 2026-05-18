@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.jac/
+jac-env/
+node_modules/
+.DS_Store
+*.db
+*.sqlite
+dist/
+build/
