@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Landing from "./components/landing/Landing";
 import AuthScreen from "./components/auth/AuthScreen";
 import AppShell from "./components/layout/AppShell";
 import AddMedicationModal from "./components/medications/AddMedicationModal";
@@ -11,11 +12,18 @@ const WELCOME = {
 };
 
 /**
- * Modules 3a + 3b + 3c: all API integration is real.
- * No more mocks — every action hits the Jac backend on localhost:8000.
+ * Three views — no react-router needed for a single-user demo:
+ *   "landing" → marketing page (Landing.jsx)
+ *   "auth"    → sign in / sign up (AuthScreen.jsx) with defaultMode preset
+ *               from whichever CTA the user clicked on the landing
+ *   "app"     → authenticated app (AppShell.jsx)
+ *
+ * If a token already exists in localStorage we boot straight into "app".
  */
 export default function App() {
-  const [authed, setAuthed] = useState(!!getToken());
+  const [view, setView] = useState(getToken() ? "app" : "landing");
+  const [authMode, setAuthMode] = useState("login");
+
   const [username, setUsername] = useState(localStorage.getItem("mb_username") ?? "");
   const [profile, setProfile] = useState(null);
   const [bootError, setBootError] = useState("");
@@ -42,14 +50,12 @@ export default function App() {
       setMedications(data?.medications ?? []);
     } catch (err) { console.error("getMedications failed:", err); }
   }
-
   async function refreshHealthScore() {
     try {
       const data = await api.healthScore();
       if (data && typeof data.score === "number") setHealthScore(data);
     } catch (err) { console.error("healthScore failed:", err); }
   }
-
   async function refreshAlerts() {
     try {
       const data = await api.getAlerts(false);
@@ -57,9 +63,9 @@ export default function App() {
     } catch (err) { console.error("getAlerts failed:", err); }
   }
 
-  // Boot: refresh everything when authed.
+  // ─── Boot ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!authed) return;
+    if (view !== "app") return;
     (async () => {
       try {
         let p = await api.getProfile();
@@ -68,18 +74,19 @@ export default function App() {
           p = await api.getProfile();
         }
         if (p && !p.status) setProfile(p);
-        await Promise.all([
-          refreshMedications(),
-          refreshHealthScore(),
-          refreshAlerts(),
-        ]);
+        await Promise.all([refreshMedications(), refreshHealthScore(), refreshAlerts()]);
       } catch (err) {
         if (err?.message === "Unauthorized") handleSignOut();
         else setBootError(err?.message ?? "Couldn't load your account data.");
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authed]);
+  }, [view]);
+
+  // ─── Landing → auth nav ────────────────────────────────────────────────
+  function handleGetStarted() { setAuthMode("register"); setView("auth"); }
+  function handleSignInClick() { setAuthMode("login"); setView("auth"); }
+  function handleBackToLanding() { setView("landing"); }
 
   // ─── Auth (real) ───────────────────────────────────────────────────────
   async function handleAuth(mode, uname, password) {
@@ -93,7 +100,7 @@ export default function App() {
     try { await api.initUser(uname); } catch (_) {}
     try { await api.clearChat(); } catch (_) {}
     setMessages([WELCOME]);
-    setAuthed(true);
+    setView("app");
   }
 
   function handleSignOut() {
@@ -105,7 +112,7 @@ export default function App() {
     setMessages([WELCOME]);
     setHealthScore(null);
     setAlerts([]);
-    setAuthed(false);
+    setView("landing");
   }
 
   // ─── Chat (real) ───────────────────────────────────────────────────────
@@ -126,7 +133,6 @@ export default function App() {
       ]);
     } finally {
       setSending(false);
-      // The agent's tools may have changed the graph — refresh everything.
       await Promise.all([refreshMedications(), refreshHealthScore(), refreshAlerts()]);
     }
   }
@@ -135,29 +141,17 @@ export default function App() {
   async function handleLogTaken(med_name) {
     try {
       await api.logDose(med_name, "taken");
-      setMessages((m) => [
-        ...m,
-        { role: "assistant", content: `Logged **${med_name}** as taken ✅` },
-      ]);
+      setMessages((m) => [...m, { role: "assistant", content: `Logged **${med_name}** as taken ✅` }]);
       await Promise.all([refreshMedications(), refreshHealthScore()]);
-    } catch (err) {
-      console.error("logDose taken failed:", err);
-    }
+    } catch (err) { console.error("logDose taken failed:", err); }
   }
-
   async function handleLogSkipped(med_name) {
     try {
       await api.logDose(med_name, "skipped");
-      setMessages((m) => [
-        ...m,
-        { role: "assistant", content: `Logged **${med_name}** as skipped. Try not to skip too often.` },
-      ]);
+      setMessages((m) => [...m, { role: "assistant", content: `Logged **${med_name}** as skipped. Try not to skip too often.` }]);
       await Promise.all([refreshMedications(), refreshHealthScore()]);
-    } catch (err) {
-      console.error("logDose skipped failed:", err);
-    }
+    } catch (err) { console.error("logDose skipped failed:", err); }
   }
-
   async function handleSubmitNewMedication(payload) {
     await api.addMedication(
       payload.med_name,
@@ -171,21 +165,12 @@ export default function App() {
 
   // ─── Alerts (real) ─────────────────────────────────────────────────────
   async function handleAcknowledgeAlert(alert_id) {
-    try {
-      await api.acknowledgeAlert(alert_id);
-      await refreshAlerts();
-    } catch (err) {
-      console.error("acknowledgeAlert failed:", err);
-    }
+    try { await api.acknowledgeAlert(alert_id); await refreshAlerts(); }
+    catch (err) { console.error("acknowledgeAlert failed:", err); }
   }
-
   async function handleRefreshAlerts() {
-    try {
-      await api.generateAlerts();
-      await refreshAlerts();
-    } catch (err) {
-      console.error("generateAlerts failed:", err);
-    }
+    try { await api.generateAlerts(); await refreshAlerts(); }
+    catch (err) { console.error("generateAlerts failed:", err); }
   }
 
   // ─── Weekly report (real, byLLM) ───────────────────────────────────────
@@ -199,25 +184,27 @@ export default function App() {
     } catch (err) {
       setWeeklyReport({
         summary: `⚠️ Couldn't generate the report: \`${err?.message ?? "unknown"}\`. Try again in a moment.`,
-        overall_score: 0,
-        adherence_pct: 0,
-        trend: "stable",
-        taken: 0,
-        expected: 0,
-        wins: [],
-        top_risks: [],
+        overall_score: 0, adherence_pct: 0, trend: "stable",
+        taken: 0, expected: 0, wins: [], top_risks: [],
       });
     } finally {
       setWeeklyReportLoading(false);
     }
   }
+  function handleCloseWeeklyReport() { setWeeklyReportOpen(false); }
 
-  function handleCloseWeeklyReport() {
-    setWeeklyReportOpen(false);
+  // ─── Render ────────────────────────────────────────────────────────────
+  if (view === "landing") {
+    return <Landing onGetStarted={handleGetStarted} onSignIn={handleSignInClick} />;
   }
-
-  if (!authed) {
-    return <AuthScreen onAuth={handleAuth} />;
+  if (view === "auth") {
+    return (
+      <AuthScreen
+        onAuth={handleAuth}
+        defaultMode={authMode}
+        onBack={handleBackToLanding}
+      />
+    );
   }
 
   return (

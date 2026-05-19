@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Pill, Loader2, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { Pill, Loader2, AlertCircle, Eye, EyeOff, ArrowLeft } from "lucide-react";
 
-export default function AuthScreen({ onAuth }) {
-  const [mode, setMode] = useState("login"); // "login" | "register"
+export default function AuthScreen({ onAuth, defaultMode = "login", onBack }) {
+  const [mode, setMode] = useState(defaultMode); // "login" | "register"
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -51,6 +51,15 @@ export default function AuthScreen({ onAuth }) {
         transition={{ duration: 0.4 }}
         className="relative w-full max-w-md"
       >
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="mb-4 inline-flex items-center gap-1.5 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+          >
+            <ArrowLeft size={14} /> Back
+          </button>
+        )}
         <div className="card !p-8">
           {/* Logo + title */}
           <div className="flex flex-col items-center mb-7">
