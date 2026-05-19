@@ -29,6 +29,7 @@ export default function AppShell({
   onLogTaken,
   onLogSkipped,
   onAddMedication,
+  onSendReminder,
   onAcknowledgeAlert,
   onRefreshAlerts,
   onOpenWeeklyReport,
@@ -54,6 +55,7 @@ export default function AppShell({
             onLogTaken={onLogTaken}
             onLogSkipped={onLogSkipped}
             onAddMedication={onAddMedication}
+            onSendReminder={onSendReminder}
             onAcknowledgeAlert={onAcknowledgeAlert}
             onRefreshAlerts={onRefreshAlerts}
           />

@@ -1,5 +1,6 @@
-import { Pill, Check, X, Clock, Plus } from "lucide-react";
+import { Pill, Check, X, Clock, Plus, Bell, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useState } from "react";
 
 function freqLabel(freq) {
   return ({
@@ -11,7 +12,27 @@ function freqLabel(freq) {
   })[freq] ?? freq;
 }
 
-export default function MedicationList({ medications = [], onLogTaken, onLogSkipped, onAdd }) {
+export default function MedicationList({ medications = [], onLogTaken, onLogSkipped, onAdd, onSendReminder }) {
+  const [sendingId, setSendingId] = useState(null);
+  const [sentMap, setSentMap] = useState({});
+
+  async function handleRemind(med_name) {
+    if (!onSendReminder) return;
+    setSendingId(med_name);
+    try {
+      const r = await onSendReminder(med_name);
+      const ok = r?.status === "sent" || r?.detail?.ok;
+      setSentMap((m) => ({ ...m, [med_name]: ok ? "ok" : "error" }));
+      setTimeout(() => setSentMap((m) => {
+        const { [med_name]: _gone, ...rest } = m;
+        return rest;
+      }), 3000);
+    } catch (err) {
+      setSentMap((m) => ({ ...m, [med_name]: "error" }));
+    } finally {
+      setSendingId(null);
+    }
+  }
   return (
     <div className="card !p-5">
       <div className="flex items-center justify-between mb-4">
@@ -85,7 +106,31 @@ export default function MedicationList({ medications = [], onLogTaken, onLogSkip
                   >
                     <X size={11} /> Skip
                   </button>
+                  {onSendReminder && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemind(med.med_name)}
+                      disabled={sendingId === med.med_name}
+                      className="py-1.5 px-2.5 text-[11px] rounded-full bg-[var(--color-accent)]/10 hover:bg-[var(--color-accent)]/20 text-[var(--color-accent-hover)] font-medium transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+                      title="Send a test reminder email"
+                    >
+                      {sendingId === med.med_name
+                        ? <Loader2 size={11} className="animate-spin" />
+                        : sentMap[med.med_name] === "ok"
+                          ? <Check size={11} />
+                          : <Bell size={11} />}
+                    </button>
+                  )}
                 </div>
+                {sentMap[med.med_name] && (
+                  <p className={`text-[10px] mt-1.5 text-right ${
+                    sentMap[med.med_name] === "ok"
+                      ? "text-[var(--color-success)]"
+                      : "text-[var(--color-error)]"
+                  }`}>
+                    {sentMap[med.med_name] === "ok" ? "Reminder sent ✓" : "Send failed"}
+                  </p>
+                )}
               </motion.li>
             ))}
           </AnimatePresence>

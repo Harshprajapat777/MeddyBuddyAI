@@ -264,6 +264,9 @@ export default function App() {
   async function handleSendCaregiverDigest() {
     return api.sendCaregiverDigest();
   }
+  async function handleSendReminder(med_name) {
+    return api.sendReminder(med_name);
+  }
 
   // ─── Render ────────────────────────────────────────────────────────────
   if (view === "landing") {
@@ -311,6 +314,7 @@ export default function App() {
         onLogTaken={handleLogTaken}
         onLogSkipped={handleLogSkipped}
         onAddMedication={() => setAddOpen(true)}
+        onSendReminder={handleSendReminder}
         onAcknowledgeAlert={handleAcknowledgeAlert}
         onRefreshAlerts={handleRefreshAlerts}
         onOpenWeeklyReport={handleOpenWeeklyReport}
