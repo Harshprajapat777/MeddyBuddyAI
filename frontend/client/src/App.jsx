@@ -123,7 +123,7 @@ export default function App() {
   function handleBackToLanding() { setView("landing"); }
 
   // ─── Auth (real) ───────────────────────────────────────────────────────
-  async function handleAuth(mode, uname, password) {
+  async function handleAuth(mode, uname, password, signupEmail = "") {
     const result = mode === "register"
       ? await api.register(uname, password)
       : await api.login(uname, password);
@@ -131,10 +131,18 @@ export default function App() {
     setToken(result.token);
     localStorage.setItem("mb_username", result.username ?? uname);
     setUsername(result.username ?? uname);
-    try { await api.initUser(uname); } catch (_) {}
+
+    // Seed the UserProfile with the signup email so Brevo has somewhere to
+    // send reminders right out of the gate. init_user is idempotent — on
+    // returning logins the existing profile wins and signupEmail is ignored.
+    try { await api.initUser(uname, signupEmail); } catch (_) {}
+    // If they entered an email but already had a profile, patch it through.
+    if (mode === "register" && signupEmail) {
+      try { await api.updateProfile({ email: signupEmail }); } catch (_) {}
+    }
+
     try { await api.clearChat(); } catch (_) {}
     try { await api.clearOnboarding(); } catch (_) {}
-    // Fresh signup → reset the "onboarded" flag so they get the guided flow
     if (mode === "register") localStorage.removeItem("mb_onboarded");
     setMessages([WELCOME]);
     setView("app");

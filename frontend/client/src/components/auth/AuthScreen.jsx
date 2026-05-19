@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Pill, Loader2, AlertCircle, Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { Pill, Loader2, AlertCircle, Eye, EyeOff, ArrowLeft, Mail } from "lucide-react";
 
 export default function AuthScreen({ onAuth, defaultMode = "login", onBack }) {
   const [mode, setMode] = useState(defaultMode); // "login" | "register"
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -17,9 +18,16 @@ export default function AuthScreen({ onAuth, defaultMode = "login", onBack }) {
       setError("Username and password are required.");
       return;
     }
+    if (mode === "register" && email.trim() !== "") {
+      const looksLikeEmail = /.+@.+\..+/.test(email.trim());
+      if (!looksLikeEmail) {
+        setError("That email doesn't look right — double-check the format.");
+        return;
+      }
+    }
     setLoading(true);
     try {
-      await onAuth(mode, username.trim(), password);
+      await onAuth(mode, username.trim(), password, email.trim());
     } catch (err) {
       setError(err?.message ?? "Something went wrong.");
     } finally {
@@ -111,6 +119,33 @@ export default function AuthScreen({ onAuth, defaultMode = "login", onBack }) {
                 className="input-field"
               />
             </div>
+
+            <AnimatePresence initial={false}>
+              {mode === "register" && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <label className="text-xs font-medium text-[var(--color-text-muted)] mb-1.5 ml-1 flex items-center gap-1.5">
+                    <Mail size={11} /> Email <span className="text-[var(--color-text-muted)]/60">(recommended)</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
+                    placeholder="you@example.com"
+                    className="input-field"
+                  />
+                  <p className="text-[11px] text-[var(--color-text-muted)] mt-1.5 ml-1 leading-snug">
+                    We'll use this to send medication reminders. You can add it later in Settings.
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <div>
               <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 ml-1">
