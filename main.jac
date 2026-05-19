@@ -217,6 +217,9 @@ walker:pub add_medication {
     can add with UserProfile entry {
         already = False;
         for m in [here --> Medication] {
+            if not isinstance(m, Medication) {
+                continue;
+            }
             if m.med_name.lower() == self.med_name.lower() and m.active {
                 already = True;
                 break;
@@ -256,6 +259,9 @@ walker:pub get_medications {
     can list with UserProfile entry {
         meds = [];
         for med in [here --> Medication] {
+            if not isinstance(med, Medication) {
+                continue;
+            }
             if med.active or self.include_inactive {
                 meds.append({
                     "med_name": med.med_name,
@@ -288,6 +294,9 @@ walker:pub log_dose {
     can record with UserProfile entry {
         target = None;
         for med in [here --> Medication] {
+            if not isinstance(med, Medication) {
+                continue;
+            }
             if med.med_name.lower() == self.med_name.lower() and med.active {
                 target = med;
                 break;
@@ -325,10 +334,16 @@ walker:pub get_dose_history {
     can gather with UserProfile entry {
         logs = [];
         for med in [here --> Medication] {
+            if not isinstance(med, Medication) {
+                continue;
+            }
             if self.med_name != "" and med.med_name.lower() != self.med_name.lower() {
                 continue;
             }
             for log in [med --> DoseLog] {
+                if not isinstance(log, DoseLog) {
+                    continue;
+                }
                 logs.append({
                     "med_name": log.med_name,
                     "timestamp": log.timestamp,
@@ -359,6 +374,9 @@ walker:pub deactivate_medication {
     can deactivate with UserProfile entry {
         found = False;
         for med in [here --> Medication] {
+            if not isinstance(med, Medication) {
+                continue;
+            }
             if med.med_name.lower() == self.med_name.lower() and med.active {
                 med.active = False;
                 found = True;
@@ -395,6 +413,9 @@ walker:pub get_adherence {
         per_med = {};
 
         for med in [here --> Medication] {
+            if not isinstance(med, Medication) {
+                continue;
+            }
             if self.med_name != "" and med.med_name.lower() != self.med_name.lower() {
                 continue;
             }
@@ -405,6 +426,9 @@ walker:pub get_adherence {
             m_taken = 0;
             m_skipped = 0;
             for log in [med --> DoseLog] {
+                if not isinstance(log, DoseLog) {
+                    continue;
+                }
                 ts = None;
                 try {
                     ts = datetime.fromisoformat(log.timestamp);
@@ -480,6 +504,9 @@ def tool_get_my_medications() -> str {
     p = profiles[0];
     lines = [];
     for med in [p --> Medication] {
+        if not isinstance(med, Medication) {
+            continue;
+        }
         if med.active {
             times_str = ", ".join(med.times);
             lines.append(f"- {med.med_name} {med.dosage} ({med.frequency}) at {times_str}");
@@ -499,6 +526,9 @@ def tool_add_medication_from_chat(med_name: str, dosage: str, frequency: str = "
     }
     p = profiles[0];
     for m in [p --> Medication] {
+        if not isinstance(m, Medication) {
+            continue;
+        }
         if m.med_name.lower() == med_name.lower() and m.active {
             return f"{med_name} is already in your active medications.";
         }
@@ -523,6 +553,9 @@ def tool_log_dose_taken_from_chat(med_name: str) -> str {
     }
     p = profiles[0];
     for med in [p --> Medication] {
+        if not isinstance(med, Medication) {
+            continue;
+        }
         if med.med_name.lower() == med_name.lower() and med.active {
             log = DoseLog(
                 med_name=med.med_name,
@@ -545,6 +578,9 @@ def tool_log_dose_skipped_from_chat(med_name: str, reason: str = "") -> str {
     }
     p = profiles[0];
     for med in [p --> Medication] {
+        if not isinstance(med, Medication) {
+            continue;
+        }
         if med.med_name.lower() == med_name.lower() and med.active {
             log = DoseLog(
                 med_name=med.med_name,
@@ -593,11 +629,17 @@ def tool_get_adherence_summary(days: int = 7) -> str {
     total_expected = 0;
     per_lines = [];
     for med in [p --> Medication] {
+        if not isinstance(med, Medication) {
+            continue;
+        }
         if not med.active {
             continue;
         }
         taken = 0;
         for log in [med --> DoseLog] {
+            if not isinstance(log, DoseLog) {
+                continue;
+            }
             try {
                 ts = datetime.fromisoformat(log.timestamp);
             } except Exception as e {
@@ -687,6 +729,363 @@ walker:pub clear_chat_history {
     can run with entry {
         chat_history.clear();
         report {"status": "cleared"};
+    }
+}
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Digital Health Twin — predictive + proactive
+# ───────────────────────────────────────────────────────────────────────────
+
+
+obj HealthScore {
+    has score: int;
+    has trend: str;
+    has adherence_pct: float;
+    has top_risks: list[str];
+    has wins: list[str];
+    has computed_at: str;
+}
+
+
+obj WeeklyReport {
+    has period_days: int;
+    has overall_score: int;
+    has adherence_pct: float;
+    has missed_doses: int;
+    has top_patterns: list[str];
+    has recommendations: list[str];
+    has summary_text: str;
+}
+
+
+def _adherence_over(days: int) -> dict {
+    profiles = [root --> UserProfile];
+    if len(profiles) == 0 {
+        return {"taken": 0, "expected": 0, "skipped": 0, "missed": 0, "per_med": {}, "pct": 100.0};
+    }
+    p = profiles[0];
+    cutoff = datetime.now() - timedelta(days=days);
+    total_taken = 0;
+    total_skipped = 0;
+    total_expected = 0;
+    per_med = {};
+    for med in [p --> Medication] {
+        if not isinstance(med, Medication) {
+            continue;
+        }
+        if not med.active {
+            continue;
+        }
+        taken = 0;
+        skipped = 0;
+        for log in [med --> DoseLog] {
+            if not isinstance(log, DoseLog) {
+                continue;
+            }
+            try {
+                ts = datetime.fromisoformat(log.timestamp);
+            } except Exception as e {
+                continue;
+            }
+            if ts < cutoff {
+                continue;
+            }
+            if log.status == "taken" {
+                taken += 1;
+            } elif log.status == "skipped" {
+                skipped += 1;
+            }
+        }
+        expected = len(med.times) * days;
+        if med.frequency == "as_needed" {
+            expected = 0;
+        }
+        total_taken += taken;
+        total_skipped += skipped;
+        total_expected += expected;
+        per_med[med.med_name] = {"taken": taken, "skipped": skipped, "expected": expected};
+    }
+    missed = max(0, total_expected - total_taken - total_skipped);
+    pct = 100.0 if total_expected == 0 else round(100.0 * total_taken / total_expected, 1);
+    return {
+        "taken": total_taken,
+        "skipped": total_skipped,
+        "missed": missed,
+        "expected": total_expected,
+        "per_med": per_med,
+        "pct": pct
+    };
+}
+
+
+def compute_health_score() -> HealthScore {
+    week = _adherence_over(7);
+    prev = _adherence_over(14);
+    score = int(round(week["pct"]));
+    trend = "stable";
+    if prev["expected"] > 0 and week["expected"] > 0 {
+        prev_pct = prev["pct"];
+        if week["pct"] - prev_pct > 5.0 {
+            trend = "improving";
+        } elif prev_pct - week["pct"] > 5.0 {
+            trend = "declining";
+        }
+    }
+    top_risks = [];
+    wins = [];
+    for (med_name, stats) in week["per_med"].items() {
+        if stats["expected"] == 0 {
+            continue;
+        }
+        med_pct = round(100.0 * stats["taken"] / stats["expected"], 1);
+        if med_pct < 70.0 {
+            top_risks.append(f"{med_name}: {med_pct}% adherence this week");
+        } elif med_pct >= 90.0 {
+            wins.append(f"{med_name}: {med_pct}% adherence — strong consistency");
+        }
+    }
+    if week["skipped"] >= 3 {
+        top_risks.append(f"{week['skipped']} skipped doses in the last 7 days");
+    }
+    if len(top_risks) == 0 and week["expected"] > 0 {
+        wins.append(f"Overall adherence {week['pct']}% — excellent.");
+    }
+    return HealthScore(
+        score=score,
+        trend=trend,
+        adherence_pct=week["pct"],
+        top_risks=top_risks,
+        wins=wins,
+        computed_at=str(datetime.now())
+    );
+}
+
+
+walker:pub health_score {
+    can run with entry {
+        hs = compute_health_score();
+        report {
+            "score": hs.score,
+            "trend": hs.trend,
+            "adherence_pct": hs.adherence_pct,
+            "top_risks": hs.top_risks,
+            "wins": hs.wins,
+            "computed_at": hs.computed_at
+        };
+    }
+}
+
+
+walker:pub get_alerts {
+    has include_acknowledged: bool = False;
+
+    can run with entry {
+        profiles = [root --> UserProfile];
+        if len(profiles) == 0 {
+            report {"alerts": [], "count": 0};
+            disengage;
+        }
+        p = profiles[0];
+        items = [];
+        for a in [p --> Alert] {
+            if not isinstance(a, Alert) {
+                continue;
+            }
+            if not isinstance(a, Alert) {
+                continue;
+            }
+            if a.acknowledged and not self.include_acknowledged {
+                continue;
+            }
+            items.append({
+                "alert_id": a.alert_id,
+                "severity": a.severity,
+                "category": a.category,
+                "message": a.message,
+                "suggested_action": a.suggested_action,
+                "created_at": a.created_at,
+                "acknowledged": a.acknowledged
+            });
+        }
+        report {"alerts": items, "count": len(items)};
+    }
+}
+
+
+walker:pub generate_alerts {
+    can run with entry {
+        profiles = [root --> UserProfile];
+        if len(profiles) == 0 {
+            report {"status": "error", "message": "no profile"};
+            disengage;
+        }
+        p = profiles[0];
+        hs = compute_health_score();
+        existing_messages = [];
+        for a in [p --> Alert] {
+            if not isinstance(a, Alert) {
+                continue;
+            }
+            if not isinstance(a, Alert) {
+                continue;
+            }
+            if not a.acknowledged {
+                existing_messages.append(a.message);
+            }
+        }
+        created = [];
+        for risk in hs.top_risks {
+            if risk in existing_messages {
+                continue;
+            }
+            severity = "warning";
+            category = "adherence";
+            action = "Open MeddyBuddy and log your next dose on time. Talk to your prescriber if the pattern continues.";
+            if "declining" in risk or "0%" in risk or "<" in risk {
+                severity = "high";
+            }
+            a = Alert(
+                alert_id=str(datetime.now().timestamp()),
+                severity=severity,
+                category=category,
+                message=risk,
+                suggested_action=action,
+                created_at=str(datetime.now()),
+                acknowledged=False
+            );
+            p ++> a;
+            created.append(risk);
+        }
+        if hs.trend == "declining" and "Trend is declining vs the prior week." not in existing_messages {
+            a = Alert(
+                alert_id=str(datetime.now().timestamp()),
+                severity="warning",
+                category="trend",
+                message="Trend is declining vs the prior week.",
+                suggested_action="Consider setting an extra reminder. If something's making it hard, talk to your prescriber.",
+                created_at=str(datetime.now()),
+                acknowledged=False
+            );
+            p ++> a;
+            created.append("Trend is declining vs the prior week.");
+        }
+        report {"status": "ok", "score": hs.score, "trend": hs.trend, "new_alerts": created, "count": len(created)};
+    }
+}
+
+
+walker:pub acknowledge_alert {
+    has alert_id: str;
+
+    can run with entry {
+        profiles = [root --> UserProfile];
+        if len(profiles) == 0 {
+            report {"status": "error", "message": "no profile"};
+            disengage;
+        }
+        p = profiles[0];
+        for a in [p --> Alert] {
+            if not isinstance(a, Alert) {
+                continue;
+            }
+            if not isinstance(a, Alert) {
+                continue;
+            }
+            if a.alert_id == self.alert_id {
+                a.acknowledged = True;
+                report {"status": "acknowledged", "alert_id": self.alert_id};
+                disengage;
+            }
+        }
+        report {"status": "error", "message": f"Alert not found: {self.alert_id}"};
+    }
+}
+
+
+sem weekly_summary = """
+Write a short, warm, plain-English weekly medication-management report
+for the user. Use the data provided (adherence, skipped doses, patterns).
+
+Rules:
+- 4–6 sentences total.
+- Lead with the most important number.
+- Acknowledge wins before risks.
+- End with one specific, achievable next step.
+- Never diagnose. Never recommend dose changes. Defer clinical questions
+  to the user's prescriber.
+""";
+
+
+def weekly_summary(
+    overall_score: int,
+    adherence_pct: float,
+    taken: int,
+    expected: int,
+    missed: int,
+    skipped: int,
+    top_risks: list[str],
+    wins: list[str],
+    trend: str
+) -> str by llm(temperature=0.4);
+
+
+walker:pub weekly_report {
+    can run with entry {
+        week = _adherence_over(7);
+        hs = compute_health_score();
+        patterns = [];
+        if hs.trend != "stable" {
+            patterns.append(f"Trend: {hs.trend} vs prior week");
+        }
+        if week["skipped"] > 0 {
+            patterns.append(f"{week['skipped']} skipped doses logged");
+        }
+        if week["missed"] > 0 {
+            patterns.append(f"{week['missed']} expected doses never logged");
+        }
+
+        recommendations = [];
+        if hs.score < 70 {
+            recommendations.append("Set a phone reminder at your usual dose time.");
+            recommendations.append("If the pattern continues, talk to your prescriber.");
+        } elif hs.score < 90 {
+            recommendations.append("You're close — try locking in the missed slots.");
+        } else {
+            recommendations.append("Keep doing what you're doing.");
+        }
+
+        try {
+            summary_text = weekly_summary(
+                overall_score=hs.score,
+                adherence_pct=hs.adherence_pct,
+                taken=week["taken"],
+                expected=week["expected"],
+                missed=week["missed"],
+                skipped=week["skipped"],
+                top_risks=hs.top_risks,
+                wins=hs.wins,
+                trend=hs.trend
+            );
+        } except Exception as e {
+            summary_text = f"Adherence over the last 7 days: {hs.adherence_pct}% ({week['taken']}/{week['expected']} doses). Trend: {hs.trend}.";
+        }
+
+        report {
+            "period_days": 7,
+            "overall_score": hs.score,
+            "adherence_pct": hs.adherence_pct,
+            "taken": week["taken"],
+            "expected": week["expected"],
+            "skipped": week["skipped"],
+            "missed": week["missed"],
+            "trend": hs.trend,
+            "top_risks": hs.top_risks,
+            "wins": hs.wins,
+            "patterns": patterns,
+            "recommendations": recommendations,
+            "summary": summary_text
+        };
     }
 }
 
