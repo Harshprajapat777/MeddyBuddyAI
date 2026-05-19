@@ -24,6 +24,7 @@ glob chat_history: list = [];
 node UserProfile {
     has name: str = "User";
     has email: str = "";
+    has caregiver_email: str = "";
     has timezone: str = "Asia/Kolkata";
     has sleep_time: str = "23:00";
     has wake_time: str = "07:00";
@@ -161,6 +162,7 @@ walker:pub get_profile {
             report {
                 "name": p.name,
                 "email": p.email,
+                "caregiver_email": p.caregiver_email,
                 "timezone": p.timezone,
                 "sleep_time": p.sleep_time,
                 "wake_time": p.wake_time,
@@ -173,6 +175,7 @@ walker:pub get_profile {
 
 walker:pub update_profile {
     has email: str = "";
+    has caregiver_email: str = "";
     has timezone: str = "";
     has sleep_time: str = "";
     has wake_time: str = "";
@@ -184,6 +187,7 @@ walker:pub update_profile {
         } else {
             p = existing[0];
             if self.email != "" { p.email = self.email; }
+            if self.caregiver_email != "" { p.caregiver_email = self.caregiver_email; }
             if self.timezone != "" { p.timezone = self.timezone; }
             if self.sleep_time != "" { p.sleep_time = self.sleep_time; }
             if self.wake_time != "" { p.wake_time = self.wake_time; }
@@ -493,6 +497,51 @@ walker:pub get_adherence {
 
 def tool_current_time() -> str {
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S");
+}
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Brevo email helper (used by reminder + caregiver digest walkers)
+# ───────────────────────────────────────────────────────────────────────────
+
+
+def send_brevo_email(to_email: str, subject: str, html_body: str) -> dict {
+    api_key = os.environ.get("BREVO_API_KEY", "");
+    if api_key == "" {
+        return {"ok": False, "error": "BREVO_API_KEY not set in .env"};
+    }
+    if to_email is None or to_email.strip() == "" {
+        return {"ok": False, "error": "no recipient email"};
+    }
+    sender_email = os.environ.get("BREVO_SENDER_EMAIL", "meddybuddy@example.com");
+    sender_name = os.environ.get("BREVO_SENDER_NAME", "MeddyBuddy");
+    payload = {
+        "sender": {"name": sender_name, "email": sender_email},
+        "to": [{"email": to_email}],
+        "subject": subject,
+        "htmlContent": html_body
+    };
+    headers = {
+        "accept": "application/json",
+        "api-key": api_key,
+        "content-type": "application/json"
+    };
+    try {
+        resp = requests.post(
+            "https://api.brevo.com/v3/smtp/email",
+            json=payload, headers=headers, timeout=10
+        );
+        if resp.status_code in (200, 201) {
+            return {"ok": True, "status_code": resp.status_code};
+        }
+        return {
+            "ok": False,
+            "status_code": resp.status_code,
+            "error": str(resp.text)[:300]
+        };
+    } except Exception as e {
+        return {"ok": False, "error": f"send failed: {str(e)[:200]}"};
+    }
 }
 
 
@@ -1161,6 +1210,196 @@ walker:pub weekly_report {
             "patterns": patterns,
             "recommendations": recommendations,
             "summary": summary_text
+        };
+    }
+}
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Proactive layer — Brevo-powered reminders + caregiver digest
+# ───────────────────────────────────────────────────────────────────────────
+
+
+walker:pub send_test_email {
+    has to_email: str = "";
+
+    can run with entry {
+        profiles = [root --> UserProfile];
+        target = self.to_email;
+        if target == "" and len(profiles) > 0 {
+            target = profiles[0].email;
+        }
+        if target == "" {
+            report {"status": "error", "message": "no email on profile and none provided"};
+            disengage;
+        }
+        result = send_brevo_email(
+            target,
+            "MeddyBuddy · email is wired",
+            "<h2>Hello from MeddyBuddy 💊</h2><p>If you can read this, Brevo is connected. We'll use this channel for medication reminders and weekly digests.</p>"
+        );
+        report {"status": "ok" if result["ok"] else "error", "result": result};
+    }
+}
+
+
+walker:pub send_reminder {
+    has med_name: str;
+
+    can run with entry {
+        profiles = [root --> UserProfile];
+        if len(profiles) == 0 {
+            report {"status": "error", "message": "no user profile"};
+            disengage;
+        }
+        p = profiles[0];
+        if p.email == "" {
+            report {"status": "error", "message": "no email on profile (set one in settings to receive reminders)"};
+            disengage;
+        }
+        target_med = None;
+        for med in [p --> Medication] {
+            if not isinstance(med, Medication) {
+                continue;
+            }
+            if med.med_name.lower() == self.med_name.lower() and med.active {
+                target_med = med;
+                break;
+            }
+        }
+        if target_med is None {
+            report {"status": "error", "message": f"active medication not found: {self.med_name}"};
+            disengage;
+        }
+        subject = f"💊 Time for your {target_med.med_name}";
+        html_body = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; color: #2D2016; background: #FAF7F2;">
+            <div style="background: #FFFFFF; border: 1px solid #E8E0D4; border-radius: 16px; padding: 24px;">
+                <p style="font-size: 20px; margin: 0 0 8px;">Hi {p.name} 👋</p>
+                <p style="margin: 0 0 16px; color: #8B7355;">Just a gentle reminder — it's time for one of your meds.</p>
+                <div style="background: #FAF7F2; border: 1px solid #E8E0D4; border-radius: 12px; padding: 16px; margin: 16px 0;">
+                    <p style="margin: 0; font-size: 18px; font-weight: 600;">💊 {target_med.med_name} {target_med.dosage}</p>
+                    <p style="margin: 4px 0 0; color: #8B7355; font-size: 14px;">{target_med.frequency} · {', '.join(target_med.times)}</p>
+                </div>
+                <p style="margin: 16px 0 0;">When you've taken it, just hop into MeddyBuddy and tell me — I'll log it.</p>
+                <p style="margin: 24px 0 0; font-size: 12px; color: #8B7355;">— MeddyBuddy · Not medical advice. Always talk to your prescriber for clinical questions.</p>
+            </div>
+        </div>
+        """;
+        result = send_brevo_email(p.email, subject, html_body);
+        log = NotificationLog(
+            reminder_id=f"reminder-{datetime.now().timestamp()}",
+            sent_at=str(datetime.now()),
+            channel="email",
+            status="sent" if result["ok"] else "failed",
+            error="" if result["ok"] else str(result.get("error", ""))[:200]
+        );
+        p ++> log;
+        report {
+            "status": "sent" if result["ok"] else "failed",
+            "med_name": target_med.med_name,
+            "to_email": p.email,
+            "detail": result
+        };
+    }
+}
+
+
+walker:pub send_caregiver_digest {
+    can run with entry {
+        profiles = [root --> UserProfile];
+        if len(profiles) == 0 {
+            report {"status": "error", "message": "no user profile"};
+            disengage;
+        }
+        p = profiles[0];
+        if p.caregiver_email == "" {
+            report {"status": "error", "message": "no caregiver_email on profile"};
+            disengage;
+        }
+
+        week = _adherence_over(7);
+        hs = compute_health_score();
+
+        # Compose med list
+        med_rows = "";
+        for med in [p --> Medication] {
+            if not isinstance(med, Medication) {
+                continue;
+            }
+            if not med.active {
+                continue;
+            }
+            pct = 0.0;
+            stats = week["per_med"].get(med.med_name, None);
+            if stats is not None and stats["expected"] > 0 {
+                pct = round(100.0 * stats["taken"] / stats["expected"], 1);
+            }
+            med_rows += f"<tr><td style='padding:6px 12px;border:1px solid #E8E0D4;'>{med.med_name} {med.dosage}</td><td style='padding:6px 12px;border:1px solid #E8E0D4;text-align:right;'>{pct}%</td></tr>";
+        }
+
+        risks_html = "".join([f"<li>{r}</li>" for r in hs.top_risks]) if len(hs.top_risks) > 0 else "<li><em>None this week</em></li>";
+        wins_html = "".join([f"<li>{w}</li>" for w in hs.wins]) if len(hs.wins) > 0 else "<li><em>—</em></li>";
+
+        trend_emoji = "📈" if hs.trend == "improving" else ("📉" if hs.trend == "declining" else "→");
+
+        subject = f"MeddyBuddy · {p.name}'s weekly check-in";
+        html_body = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #2D2016; background: #FAF7F2;">
+            <div style="background: #FFFFFF; border: 1px solid #E8E0D4; border-radius: 16px; padding: 28px;">
+                <p style="margin: 0; font-size: 14px; color: #8B7355; text-transform: uppercase; letter-spacing: 1px;">Weekly digest</p>
+                <h1 style="margin: 4px 0 16px; font-size: 28px; font-weight: 400;">{p.name}'s last 7 days</h1>
+
+                <div style="display: flex; gap: 12px; margin-bottom: 20px;">
+                    <div style="flex:1; background: #FAF7F2; border: 1px solid #E8E0D4; border-radius: 12px; padding: 12px;">
+                        <p style="margin: 0; font-size: 11px; color: #8B7355; text-transform: uppercase;">Score</p>
+                        <p style="margin: 4px 0 0; font-size: 24px; font-weight: 600; color: #C4956A;">{hs.score} / 100</p>
+                    </div>
+                    <div style="flex:1; background: #FAF7F2; border: 1px solid #E8E0D4; border-radius: 12px; padding: 12px;">
+                        <p style="margin: 0; font-size: 11px; color: #8B7355; text-transform: uppercase;">Adherence</p>
+                        <p style="margin: 4px 0 0; font-size: 24px; font-weight: 600;">{hs.adherence_pct}%</p>
+                    </div>
+                    <div style="flex:1; background: #FAF7F2; border: 1px solid #E8E0D4; border-radius: 12px; padding: 12px;">
+                        <p style="margin: 0; font-size: 11px; color: #8B7355; text-transform: uppercase;">Trend</p>
+                        <p style="margin: 4px 0 0; font-size: 18px; font-weight: 600;">{trend_emoji} {hs.trend.capitalize()}</p>
+                    </div>
+                </div>
+
+                <h3 style="font-size: 14px; margin: 20px 0 8px; text-transform: uppercase; letter-spacing: 1px; color: #8B7355;">Per medication</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                    {med_rows}
+                </table>
+
+                <h3 style="font-size: 14px; margin: 20px 0 8px; text-transform: uppercase; letter-spacing: 1px; color: #8B7355;">Risks</h3>
+                <ul style="margin: 0; padding-left: 20px; font-size: 14px;">{risks_html}</ul>
+
+                <h3 style="font-size: 14px; margin: 20px 0 8px; text-transform: uppercase; letter-spacing: 1px; color: #8B7355;">Wins</h3>
+                <ul style="margin: 0; padding-left: 20px; font-size: 14px;">{wins_html}</ul>
+
+                <p style="margin: 28px 0 0; padding-top: 16px; border-top: 1px solid #E8E0D4; font-size: 12px; color: #8B7355;">
+                    You're getting this because {p.name} added you as their care contact in MeddyBuddy.
+                    This is not medical advice — for any concerns, please contact their prescriber.
+                </p>
+            </div>
+        </div>
+        """;
+
+        result = send_brevo_email(p.caregiver_email, subject, html_body);
+        log = NotificationLog(
+            reminder_id=f"digest-{datetime.now().timestamp()}",
+            sent_at=str(datetime.now()),
+            channel="email",
+            status="sent" if result["ok"] else "failed",
+            error="" if result["ok"] else str(result.get("error", ""))[:200]
+        );
+        p ++> log;
+        report {
+            "status": "sent" if result["ok"] else "failed",
+            "to_email": p.caregiver_email,
+            "score": hs.score,
+            "trend": hs.trend,
+            "adherence_pct": hs.adherence_pct,
+            "detail": result
         };
     }
 }
