@@ -132,6 +132,14 @@ export const api = {
     request("/walker/send_reminder", { med_name }),
   sendCaregiverDigest: () =>
     request("/walker/send_caregiver_digest", {}),
+
+  // ─── Symptoms & Mood Analyzer (isolated flow) ──────────────────────────
+  symptomsChat: (user_message) =>
+    request("/walker/symptoms_chat", { user_message }),
+  symptomsAnalyze: () => request("/walker/symptoms_analyze", {}),
+  symptomsClear: () => request("/walker/symptoms_clear", {}),
+  analyzeHealthFile: (content_base64, mime_type, filename = "upload") =>
+    request("/walker/analyze_health_file", { content_base64, mime_type, filename }),
 };
 
 export { ApiError };

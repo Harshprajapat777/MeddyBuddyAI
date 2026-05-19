@@ -36,6 +36,7 @@ export default function AppShell({
   onOpenWeeklyReport,
   onCloseWeeklyReport,
   onOpenSettings,
+  onOpenSymptoms,
   onSendToCaregiver,
 }) {
   return (
@@ -45,6 +46,7 @@ export default function AppShell({
         onSignOut={onSignOut}
         onOpenWeeklyReport={onOpenWeeklyReport}
         onOpenSettings={onOpenSettings}
+        onOpenSymptoms={onOpenSymptoms}
       />
 
       <main className="flex-1 container-max w-full px-4 sm:px-6 lg:px-8 py-6">

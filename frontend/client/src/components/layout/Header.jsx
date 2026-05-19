@@ -1,7 +1,7 @@
-import { Pill, LogOut, FileText, Settings } from "lucide-react";
+import { Pill, LogOut, FileText, Settings, HeartPulse } from "lucide-react";
 import { motion } from "framer-motion";
 
-export default function Header({ username, onSignOut, onOpenWeeklyReport, onOpenSettings }) {
+export default function Header({ username, onSignOut, onOpenWeeklyReport, onOpenSettings, onOpenSymptoms }) {
   return (
     <header className="sticky top-0 z-20 bg-[var(--color-background)]/85 backdrop-blur-md border-b border-[var(--color-card-border)]">
       <div className="container-max px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -22,6 +22,17 @@ export default function Header({ username, onSignOut, onOpenWeeklyReport, onOpen
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          {onOpenSymptoms && (
+            <button
+              type="button"
+              onClick={onOpenSymptoms}
+              className="btn-secondary !py-2 !px-4 text-sm"
+              title="Quick mood + symptom check-in (separate flow)"
+            >
+              <HeartPulse size={14} />
+              <span className="hidden md:inline">Symptoms & Mood</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={onOpenWeeklyReport}
@@ -29,7 +40,7 @@ export default function Header({ username, onSignOut, onOpenWeeklyReport, onOpen
             title="Weekly report"
           >
             <FileText size={14} />
-            <span className="hidden sm:inline">Weekly report</span>
+            <span className="hidden md:inline">Weekly report</span>
           </button>
 
           <button

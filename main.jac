@@ -1436,6 +1436,327 @@ walker:pub send_caregiver_digest {
 }
 
 
+# ───────────────────────────────────────────────────────────────────────────
+# Symptoms & Mood Analyzer — isolated flow (does NOT touch existing chat)
+# ───────────────────────────────────────────────────────────────────────────
+
+
+glob symptoms_history: list = [];
+
+
+sem symptom_intake = """
+You are MeddyBuddy in a brief mood / symptom check-in. You have a STRICT
+budget of 2-3 short, warm questions before the conversation gets handed
+off for analysis. NEVER exceed 3 questions.
+
+How to behave:
+- Turn 1: warmly greet, ask ONE focused question about how they're
+  feeling overall (mood / energy / general well-being).
+- Turn 2: based on their reply, ask ONE specific follow-up about
+  symptoms (e.g. "any physical symptoms?", "anything bothering you in
+  particular?").
+- Turn 3: ONE last question if needed (e.g. "how long has this been
+  going on?"). After they answer turn 3, briefly thank them and tell
+  them you'll prepare a short analysis with follow-up suggestions.
+- Do NOT diagnose. Do NOT recommend specific medications here. Just
+  gather information warmly, like a friend checking in.
+- Keep each reply 1-2 short sentences. No long paragraphs.
+
+If a user mentions anything emergent (chest pain, stroke signs, severe
+breathing trouble, suicidal thoughts), pause the questions and tell
+them to contact emergency services immediately.
+""";
+
+
+def symptom_intake(message: str) -> str
+    by llm(
+        conversation=symptoms_history,
+        temperature=0.5
+    );
+
+
+obj SymptomAnalysis {
+    has summary: str;
+    has severity: str;
+    has urgent_care_needed: bool;
+    has follow_up_suggestions: list[str];
+    has medication_suggestions: list[str];
+    has diet_suggestions: list[str];
+}
+
+
+sem analyze_symptoms = """
+Based on the user's brief mood + symptom intake conversation, produce a
+structured analysis the user can act on. Be warm, specific, and
+conservative.
+
+For each field:
+- summary: 1-2 sentence plain-English recap of what the user shared.
+- severity: one of "mild", "moderate", "severe" — pick conservatively.
+- urgent_care_needed: true ONLY if symptoms suggest a real emergency
+  (chest pain, stroke signs, suicidal ideation, severe breathing
+  difficulty, anaphylaxis). Otherwise false.
+- follow_up_suggestions: 2-4 short, concrete next steps. Lifestyle,
+  rest, hydration, when to see a doctor. Never prescriptions.
+- medication_suggestions: 2-4 OTC categories that might help (e.g.
+  "OTC antihistamine like cetirizine", "OTC pain reliever",
+  "throat lozenges"). Always include "Confirm with a pharmacist before
+  taking anything new." as the last item. Never specific prescription
+  drugs or dosages.
+- diet_suggestions: 2-4 short food / drink ideas tailored to what the
+  user said (warm liquids for sore throat, ginger for nausea, etc.).
+
+Hard rules:
+- This is NOT medical advice. It is supportive guidance only.
+- Never diagnose a specific condition by name.
+- When in doubt, escalate to "speak with a clinician".
+""";
+
+
+def analyze_symptoms(conversation_summary: str) -> SymptomAnalysis
+    by llm(temperature=0.3);
+
+
+walker:pub symptoms_chat {
+    has user_message: str;
+
+    can run with entry {
+        if self.user_message is None or self.user_message.strip() == "" {
+            report {"status": "error", "message": "Empty message"};
+            disengage;
+        }
+        try {
+            response = symptom_intake(self.user_message);
+            # Count user turns so far (history has alternating roles)
+            user_turn_count = 0;
+            for msg in symptoms_history {
+                if isinstance(msg, dict) and msg.get("role") == "user" {
+                    user_turn_count += 1;
+                }
+            }
+            report {
+                "status": "ok",
+                "response": response,
+                "user_turn_count": user_turn_count,
+                "ready_for_analysis": user_turn_count >= 3
+            };
+        } except Exception as e {
+            report {"status": "error", "message": f"LLM error: {str(e)[:200]}"};
+        }
+    }
+}
+
+
+walker:pub symptoms_analyze {
+    can run with entry {
+        # Concatenate the symptoms conversation into a readable summary
+        convo = "";
+        for msg in symptoms_history {
+            if isinstance(msg, dict) {
+                role = msg.get("role", "?");
+                content = msg.get("content", "");
+                convo = convo + f"{role}: {content}\n";
+            }
+        }
+        if convo.strip() == "" {
+            report {"status": "error", "message": "No symptom conversation to analyze yet."};
+            disengage;
+        }
+        try {
+            result = analyze_symptoms(convo);
+            report {
+                "status": "ok",
+                "summary": result.summary,
+                "severity": result.severity,
+                "urgent_care_needed": result.urgent_care_needed,
+                "follow_up_suggestions": result.follow_up_suggestions,
+                "medication_suggestions": result.medication_suggestions,
+                "diet_suggestions": result.diet_suggestions
+            };
+        } except Exception as e {
+            report {"status": "error", "message": f"Analysis failed: {str(e)[:200]}"};
+        }
+    }
+}
+
+
+walker:pub symptoms_clear {
+    can run with entry {
+        symptoms_history.clear();
+        report {"status": "cleared"};
+    }
+}
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# OCR / File analysis — internal flag-based disease detection
+# Six flags drive the detection logic. The LLM is asked to map findings
+# onto these flags, so the UI can render fixed buckets / badges.
+# ───────────────────────────────────────────────────────────────────────────
+
+
+glob _disease_flags: list[str] = [
+    "acne",
+    "eczema_dermatitis",
+    "psoriasis",
+    "rosacea",
+    "skin_infection",
+    "rash_or_allergic"
+];
+
+
+def _extract_pdf_text(b64_content: str) -> str {
+    import base64;
+    import io;
+    import pdfplumber;
+
+    try {
+        raw = base64.b64decode(b64_content);
+    } except Exception as e {
+        return "";
+    }
+    text = "";
+    try {
+        with pdfplumber.open(io.BytesIO(raw)) as pdf {
+            for page in pdf.pages {
+                page_text = page.extract_text();
+                if page_text {
+                    text = text + page_text + "\n";
+                }
+            }
+        }
+    } except Exception as e {
+        return "";
+    }
+    return text.strip();
+}
+
+
+def _analyze_skin_image(b64_content: str, mime: str) -> dict {
+    # Use LiteLLM directly for vision — byLLM 0.4.20 doesn't expose images.
+    import from litellm { completion }
+    flags_str = ", ".join(_disease_flags);
+    intro = "You are a careful medical image triage assistant. The user uploaded a photo. Look at it and identify likely visible skin conditions from this fixed list ONLY: ";
+    tail = ", or 'normal_skin' if nothing concerning is visible. Reply with a JSON object containing: detected_flags (list of strings from the list above), confidence (low/medium/high), description (1-2 sentences), next_steps (2-3 short suggestions). Hard rules: NEVER give a definitive diagnosis. ALWAYS recommend a dermatologist visit for confirmation. If the image is not skin or unclear, set detected_flags=[] and say so.";
+    prompt = intro + flags_str + tail;
+    try {
+        resp = completion(
+            model="anthropic/claude-sonnet-4-6",
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "data:" + mime + ";base64," + b64_content}
+                    }
+                ]
+            }],
+            max_tokens=500
+        );
+        raw = resp.choices[0].message.content;
+        return {"ok": True, "raw": raw};
+    } except Exception as e {
+        return {"ok": False, "error": f"vision call failed: {str(e)[:200]}"};
+    }
+}
+
+
+sem _analyze_report_text = """
+The user uploaded a medical document (lab report, prescription scan, etc).
+Read the extracted text and produce a structured triage with:
+- summary: 2-3 sentence plain-English summary of what the document says.
+- detected_flags: list any of these that apply: acne, eczema_dermatitis,
+  psoriasis, rosacea, skin_infection, rash_or_allergic. Can be empty.
+- abnormal_findings: list of any out-of-range values or concerning notes
+  (each item is a short sentence).
+- next_steps: 2-3 short, conservative suggestions.
+
+Never diagnose. Always recommend the user discuss the report with their
+clinician.
+""";
+
+
+obj ReportAnalysis {
+    has summary: str;
+    has detected_flags: list[str];
+    has abnormal_findings: list[str];
+    has next_steps: list[str];
+}
+
+
+def _analyze_report_text(text: str) -> ReportAnalysis by llm(temperature=0.2);
+
+
+walker:pub analyze_health_file {
+    has content_base64: str;
+    has filename: str = "upload";
+    has mime_type: str = "application/pdf";
+
+    can run with entry {
+        if self.content_base64 is None or self.content_base64.strip() == "" {
+            report {"status": "error", "message": "Empty file content."};
+            disengage;
+        }
+
+        mime = self.mime_type.lower() if self.mime_type else "";
+
+        # PDF: extract text, then LLM-analyze
+        if "pdf" in mime {
+            text = _extract_pdf_text(self.content_base64);
+            if text == "" {
+                report {
+                    "status": "error",
+                    "message": "Could not extract text from PDF. The file may be a scanned image PDF — try uploading the page as an image instead."
+                };
+                disengage;
+            }
+            try {
+                analysis = _analyze_report_text(text);
+                report {
+                    "status": "ok",
+                    "file_type": "pdf",
+                    "filename": self.filename,
+                    "summary": analysis.summary,
+                    "detected_flags": analysis.detected_flags,
+                    "abnormal_findings": analysis.abnormal_findings,
+                    "next_steps": analysis.next_steps,
+                    "extracted_chars": len(text)
+                };
+            } except Exception as e {
+                report {"status": "error", "message": f"Analysis failed: {str(e)[:200]}"};
+            }
+            disengage;
+        }
+
+        # Image: vision call
+        if "image" in mime {
+            result = _analyze_skin_image(self.content_base64, mime);
+            if not result.get("ok") {
+                report {
+                    "status": "error",
+                    "message": result.get("error", "Image analysis failed.")
+                };
+                disengage;
+            }
+            report {
+                "status": "ok",
+                "file_type": "image",
+                "filename": self.filename,
+                "raw_analysis": result.get("raw", ""),
+                "detection_flags_universe": _disease_flags
+            };
+            disengage;
+        }
+
+        report {
+            "status": "error",
+            "message": f"Unsupported file type: {mime}. Upload a PDF or an image."
+        };
+    }
+}
+
+
 with entry {
     print("MeddyBuddyAI backend booting…");
     print(f"LLM model: {_model_name}");

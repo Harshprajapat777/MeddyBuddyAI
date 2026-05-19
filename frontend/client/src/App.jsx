@@ -4,6 +4,7 @@ import AuthScreen from "./components/auth/AuthScreen";
 import AppShell from "./components/layout/AppShell";
 import AddMedicationModal from "./components/medications/AddMedicationModal";
 import SettingsModal from "./components/settings/SettingsModal";
+import SymptomsAnalyzer from "./components/symptoms/SymptomsAnalyzer";
 import { api, getToken, setToken, clearToken } from "./api/client";
 
 const WELCOME = {
@@ -49,6 +50,9 @@ export default function App() {
 
   // Settings
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Symptoms & Mood Analyzer — isolated page (toggles full-screen view)
+  const [symptomsOpen, setSymptomsOpen] = useState(false);
 
   // Chat
   const [messages, setMessages] = useState([WELCOME]);
@@ -298,6 +302,12 @@ export default function App() {
     );
   }
 
+  // Symptoms & Mood Analyzer — fully isolated page, takes over the screen.
+  // Existing chat / sidebar / state is preserved underneath untouched.
+  if (symptomsOpen) {
+    return <SymptomsAnalyzer onBack={() => setSymptomsOpen(false)} />;
+  }
+
   return (
     <>
       {bootError && (
@@ -337,6 +347,7 @@ export default function App() {
         onOpenWeeklyReport={handleOpenWeeklyReport}
         onCloseWeeklyReport={handleCloseWeeklyReport}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSymptoms={() => setSymptomsOpen(true)}
         onSendToCaregiver={handleSendCaregiverDigest}
       />
       <AddMedicationModal
