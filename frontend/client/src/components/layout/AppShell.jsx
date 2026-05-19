@@ -19,6 +19,11 @@ export default function AppShell({
   weeklyReport,
   weeklyReportOpen,
   weeklyReportLoading,
+  onboardingMode = false,
+  onboardingCanFinish = false,
+  onFinishOnboarding,
+  chatSuggestions,
+  chatPlaceholder,
   onSignOut,
   onSendMessage,
   onLogTaken,
@@ -54,6 +59,11 @@ export default function AppShell({
             messages={messages}
             onSend={onSendMessage}
             sending={sending}
+            onboardingMode={onboardingMode}
+            onboardingCanFinish={onboardingCanFinish}
+            onFinishOnboarding={onFinishOnboarding}
+            suggestions={chatSuggestions}
+            placeholder={chatPlaceholder}
           />
         </div>
       </main>

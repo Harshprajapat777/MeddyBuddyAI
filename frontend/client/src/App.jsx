@@ -11,14 +11,28 @@ const WELCOME = {
     "Hi! I'm **MeddyBuddy** 💊 — your medication companion. Try things like:\n\n- *What am I on?*\n- *I just took my aspirin.*\n- *Is ibuprofen safe with my metformin?*\n- *How's my adherence this week?*",
 };
 
+const WELCOME_ONBOARDING = {
+  role: "assistant",
+  content:
+    "Hi! I'm **MeddyBuddy** 💊 — your medication companion.\n\nLet's get your meds set up so I can start helping. Tell me about your **first medication** — the name, the dose, and roughly when you take it. For example: *\"Aspirin 81mg every morning\"*.",
+};
+
+const ONBOARDING_SUGGESTIONS = [
+  "Aspirin 81mg every morning",
+  "Metformin 500mg, 8am and 8pm",
+  "Vitamin D 1000 IU, mornings",
+  "That's all for now",
+];
+
 /**
  * Three views — no react-router needed for a single-user demo:
- *   "landing" → marketing page (Landing.jsx)
- *   "auth"    → sign in / sign up (AuthScreen.jsx) with defaultMode preset
- *               from whichever CTA the user clicked on the landing
- *   "app"     → authenticated app (AppShell.jsx)
+ *   "landing" → marketing page
+ *   "auth"    → sign in / sign up
+ *   "app"     → authenticated app (split into onboarding vs main chat by state)
  *
- * If a token already exists in localStorage we boot straight into "app".
+ * Onboarding mode is active while the user is still building their medication
+ * list. A dedicated `meddy_onboarder` byLLM agent runs the focused setup flow;
+ * once they tap "I'm done" we switch to the general `meddy_chat` agent.
  */
 export default function App() {
   const [view, setView] = useState(getToken() ? "app" : "landing");
@@ -36,6 +50,9 @@ export default function App() {
   const [messages, setMessages] = useState([WELCOME]);
   const [sending, setSending] = useState(false);
 
+  // Onboarding mode (true while the user is still adding their initial meds)
+  const [onboardingMode, setOnboardingMode] = useState(false);
+
   // Digital Twin
   const [healthScore, setHealthScore] = useState(null);
   const [alerts, setAlerts] = useState([]);
@@ -48,7 +65,8 @@ export default function App() {
     try {
       const data = await api.getMedications(false);
       setMedications(data?.medications ?? []);
-    } catch (err) { console.error("getMedications failed:", err); }
+      return data?.medications ?? [];
+    } catch (err) { console.error("getMedications failed:", err); return []; }
   }
   async function refreshHealthScore() {
     try {
@@ -74,7 +92,19 @@ export default function App() {
           p = await api.getProfile();
         }
         if (p && !p.status) setProfile(p);
-        await Promise.all([refreshMedications(), refreshHealthScore(), refreshAlerts()]);
+        const [meds] = await Promise.all([
+          refreshMedications(),
+          refreshHealthScore(),
+          refreshAlerts(),
+        ]);
+        // Default to onboarding for users with no meds yet.
+        const localFinished = localStorage.getItem("mb_onboarded") === "1";
+        const shouldOnboard = (meds?.length ?? 0) === 0 && !localFinished;
+        setOnboardingMode(shouldOnboard);
+        setMessages([shouldOnboard ? WELCOME_ONBOARDING : WELCOME]);
+        if (shouldOnboard) {
+          try { await api.clearOnboarding(); } catch (_) {}
+        }
       } catch (err) {
         if (err?.message === "Unauthorized") handleSignOut();
         else setBootError(err?.message ?? "Couldn't load your account data.");
@@ -99,6 +129,9 @@ export default function App() {
     setUsername(result.username ?? uname);
     try { await api.initUser(uname); } catch (_) {}
     try { await api.clearChat(); } catch (_) {}
+    try { await api.clearOnboarding(); } catch (_) {}
+    // Fresh signup → reset the "onboarded" flag so they get the guided flow
+    if (mode === "register") localStorage.removeItem("mb_onboarded");
     setMessages([WELCOME]);
     setView("app");
   }
@@ -112,15 +145,35 @@ export default function App() {
     setMessages([WELCOME]);
     setHealthScore(null);
     setAlerts([]);
+    setOnboardingMode(false);
     setView("landing");
   }
 
-  // ─── Chat (real) ───────────────────────────────────────────────────────
+  // ─── Onboarding hand-off ───────────────────────────────────────────────
+  async function handleFinishOnboarding() {
+    setOnboardingMode(false);
+    localStorage.setItem("mb_onboarded", "1");
+    try { await api.clearChat(); } catch (_) {}
+    setMessages([
+      {
+        role: "assistant",
+        content:
+          "Great — you're all set up. 🎉 From here on, just chat with me normally — log doses, ask about interactions, or check your weekly report any time. I'll also keep an eye on your adherence and ping you if anything looks off.",
+      },
+    ]);
+    // Refresh once more so the score reflects whatever was just added.
+    await Promise.all([refreshMedications(), refreshHealthScore(), refreshAlerts()]);
+  }
+
+  // ─── Chat (real, routes to onboarding or main agent) ───────────────────
   async function handleSend(text) {
     setMessages((m) => [...m, { role: "user", content: text }]);
     setSending(true);
+    const useOnboarding = onboardingMode;
     try {
-      const data = await api.chat(text);
+      const data = useOnboarding
+        ? await api.onboardingChat(text)
+        : await api.chat(text);
       const reply = data?.response ?? "_(Empty response from agent.)_";
       setMessages((m) => [...m, { role: "assistant", content: reply }]);
     } catch (err) {
@@ -225,6 +278,15 @@ export default function App() {
         weeklyReport={weeklyReport}
         weeklyReportOpen={weeklyReportOpen}
         weeklyReportLoading={weeklyReportLoading}
+        onboardingMode={onboardingMode}
+        onboardingCanFinish={onboardingMode && medications.length >= 1}
+        onFinishOnboarding={handleFinishOnboarding}
+        chatSuggestions={onboardingMode ? ONBOARDING_SUGGESTIONS : undefined}
+        chatPlaceholder={
+          onboardingMode
+            ? "Tell me about a medication — e.g. \"Aspirin 81mg mornings\""
+            : "Talk to MeddyBuddy…"
+        }
         onSignOut={handleSignOut}
         onSendMessage={handleSend}
         onLogTaken={handleLogTaken}

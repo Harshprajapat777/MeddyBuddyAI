@@ -734,6 +734,82 @@ walker:pub clear_chat_history {
 
 
 # ───────────────────────────────────────────────────────────────────────────
+# Onboarding agent — first-time conversational med setup
+# ───────────────────────────────────────────────────────────────────────────
+
+
+glob onboarding_history: list = [];
+
+
+sem meddy_onboarder = """
+You are MeddyBuddy in onboarding mode. The user just signed up and has
+no medications saved yet (or very few). Your single job in this session
+is to help them build their medication list by *chatting* — never by
+making them fill out a form.
+
+Conversation rules:
+- Start by warmly welcoming them and asking for their FIRST medication
+  (name, dose, and when they take it).
+- ONE focused question at a time. Never dump a long form on them.
+- Once you have name + dose + timing for a medication, call
+  tool_add_medication_from_chat with sensible values for frequency and
+  times. Pick the frequency from: "daily", "twice_daily",
+  "three_times_daily", "as_needed", "weekly". Pick times in 24h format
+  like "08:00".
+- If something is missing, ask only for the missing piece.
+- After each addition, briefly confirm what you saved and ask "what's
+  the next one, or is that everything?" Let the user lead.
+- When the user signals they're done ("that's all", "that's it",
+  "nothing else"), warmly hand off: tell them they can now chat with
+  you any time to log doses, ask about interactions, or get a weekly
+  report — and that you'll keep an eye on their adherence.
+
+Hard rules:
+- Never diagnose, prescribe, or change a dose.
+- For clinical questions, defer to their prescriber.
+- Don't ask for sensitive personal data beyond what's needed.
+""";
+
+
+def meddy_onboarder(message: str) -> str
+    by llm(
+        conversation=onboarding_history,
+        tools=[
+            tool_add_medication_from_chat,
+            tool_get_my_medications,
+            tool_current_time
+        ],
+        temperature=0.6
+    );
+
+
+walker:pub onboarding_chat {
+    has user_message: str;
+
+    can run with entry {
+        if self.user_message is None or self.user_message.strip() == "" {
+            report {"status": "error", "message": "Empty message"};
+            disengage;
+        }
+        try {
+            response = meddy_onboarder(self.user_message);
+            report {"status": "ok", "response": response};
+        } except Exception as e {
+            report {"status": "error", "message": f"LLM error: {str(e)[:200]}"};
+        }
+    }
+}
+
+
+walker:pub clear_onboarding_history {
+    can run with entry {
+        onboarding_history.clear();
+        report {"status": "cleared"};
+    }
+}
+
+
+# ───────────────────────────────────────────────────────────────────────────
 # Digital Health Twin — predictive + proactive
 # ───────────────────────────────────────────────────────────────────────────
 

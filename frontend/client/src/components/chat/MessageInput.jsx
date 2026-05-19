@@ -1,14 +1,21 @@
 import { useState, useRef, useEffect } from "react";
 import { Send, Loader2 } from "lucide-react";
 
-const SUGGESTIONS = [
+const DEFAULT_SUGGESTIONS = [
   "What medications am I on?",
   "I just took my aspirin",
   "How's my adherence this week?",
   "Is ibuprofen safe with metformin?",
 ];
 
-export default function MessageInput({ onSend, disabled, showSuggestions = true }) {
+export default function MessageInput({
+  onSend,
+  disabled,
+  showSuggestions = true,
+  suggestions,
+  placeholder = "Talk to MeddyBuddy…",
+}) {
+  const SUGGESTIONS = suggestions ?? DEFAULT_SUGGESTIONS;
   const [text, setText] = useState("");
   const textareaRef = useRef(null);
 
@@ -63,7 +70,7 @@ export default function MessageInput({ onSend, disabled, showSuggestions = true 
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           rows={1}
-          placeholder="Talk to MeddyBuddy…"
+          placeholder={placeholder}
           disabled={disabled}
           className="flex-1 resize-none bg-transparent outline-none px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)]/70 max-h-36"
         />

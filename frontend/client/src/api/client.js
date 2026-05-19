@@ -111,6 +111,11 @@ export const api = {
   chat: (user_message) => request("/walker/meddy_chat", { user_message }),
   clearChat: () => request("/walker/clear_chat_history", {}),
 
+  // ─── Onboarding agent (focused med-setup chat for first-time users) ────
+  onboardingChat: (user_message) =>
+    request("/walker/onboarding_chat", { user_message }),
+  clearOnboarding: () => request("/walker/clear_onboarding_history", {}),
+
   // ─── Digital Twin ──────────────────────────────────────────────────────
   healthScore: () => request("/walker/health_score", {}),
   getAlerts: (include_acknowledged = false) =>
