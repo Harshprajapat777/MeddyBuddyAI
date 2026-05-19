@@ -132,7 +132,7 @@ Architecture:
 - Frontend is single-page, three views: landing / auth / app. Pure props down, callbacks up — no Redux, no Context.
 - API client abstracts the universal response envelope (data.reports[0] is the real payload) and the Bearer flow.
 
-The full feature spec is in FEATURES.md. The build plan with hour-by-hour breakdown is in todobackend.md. The endpoint reference is in api.md. The README has a "lessons learned" section documenting 8 real jaclang 0.10.2 gotchas we hit during the build.
+The deeper "why we used Jac this way" argument lives in JAC_USAGE.md. The README has a "lessons learned" section documenting 8 real jaclang 0.10.2 gotchas we hit during the build.
 ```
 
 ### Challenges we ran into
@@ -158,7 +158,7 @@ Multi-file imports for server walkers don't work via `cl import` (that's client-
 - 21 walkers all working end-to-end, sanity-tested with curl before submission
 - The agent saves "Metformin 500mg twice a day at 8am and 8pm" with frequency=twice_daily, times=["08:00","20:00"] — not a regex parser, just sem-annotated tool calling
 - A polished React frontend (landing page with how-it-works, settings modal, weekly-report modal with markdown summary, per-medication reminder bell) — not a Postman screenshot pretending to be a UI
-- Engineering discipline: 20+ atomic commits, real README, api.md endpoint reference, todobackend.md build plan, .env.example with verified Brevo setup steps
+- Engineering discipline: 22+ atomic commits, real README, JAC_USAGE.md essay on deep Jac primitive use, SUBMISSION.md submission guide, .env.example with verified Brevo setup steps
 ```
 
 ### What we learned

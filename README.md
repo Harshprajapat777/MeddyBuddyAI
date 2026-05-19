@@ -259,10 +259,9 @@ MeddyBuddyAI/
 ├── requirements.txt
 ├── .env.example          ← ANTHROPIC_API_KEY, BREVO_API_KEY templates
 ├── .gitignore
-├── FEATURES.md           ← original v1 feature spec
-├── todobackend.md        ← full Phase-1/Phase-2 build plan, hour-by-hour
-├── api.md                ← endpoint reference for the React client
 ├── README.md             ← (this file)
+├── SUBMISSION.md         ← step-by-step submission + demo-recording guide
+├── JAC_USAGE.md          ← Best-Use-of-Jac essay (10 primitives, line refs)
 ├── jac/                  ← internal Jac reference notes (study material)
 └── frontend/
     └── client/           ← React 19 + Vite + Tailwind v4 single-page app
