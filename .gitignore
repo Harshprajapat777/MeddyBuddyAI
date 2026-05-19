@@ -12,4 +12,5 @@ dist/
 build/
 data/uploads/
 data/embeddings.pkl
+.jaseci_logs/
 
