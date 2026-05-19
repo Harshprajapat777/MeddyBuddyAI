@@ -1,4 +1,19 @@
 import from datetime { datetime, timedelta }
+import os;
+import requests;
+import from dotenv { load_dotenv }
+import from byllm.lib { Model }
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# byLLM model
+# ───────────────────────────────────────────────────────────────────────────
+
+
+glob _dotenv_loaded: bool = load_dotenv();
+glob _model_name: str = os.environ.get("BYLLM_MODEL", "claude-sonnet-4-6");
+glob llm = Model(model_name=_model_name);
+glob chat_history: list = [];
 
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -447,7 +462,237 @@ walker:pub get_adherence {
 }
 
 
+# ───────────────────────────────────────────────────────────────────────────
+# byLLM tools — direct graph access (no walker spawn-in-walker)
+# ───────────────────────────────────────────────────────────────────────────
+
+
+def tool_current_time() -> str {
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S");
+}
+
+
+def tool_get_my_medications() -> str {
+    profiles = [root --> UserProfile];
+    if len(profiles) == 0 {
+        return "User profile not initialized. Ask the user to set it up first.";
+    }
+    p = profiles[0];
+    lines = [];
+    for med in [p --> Medication] {
+        if med.active {
+            times_str = ", ".join(med.times);
+            lines.append(f"- {med.med_name} {med.dosage} ({med.frequency}) at {times_str}");
+        }
+    }
+    if len(lines) == 0 {
+        return "No active medications.";
+    }
+    return "\n".join(lines);
+}
+
+
+def tool_add_medication_from_chat(med_name: str, dosage: str, frequency: str = "daily") -> str {
+    profiles = [root --> UserProfile];
+    if len(profiles) == 0 {
+        return "Error: no user profile yet.";
+    }
+    p = profiles[0];
+    for m in [p --> Medication] {
+        if m.med_name.lower() == med_name.lower() and m.active {
+            return f"{med_name} is already in your active medications.";
+        }
+    }
+    med = Medication(
+        med_name=med_name,
+        dosage=dosage,
+        frequency=frequency,
+        times=["08:00"],
+        active=True,
+        added_at=str(datetime.now())
+    );
+    p ++> med;
+    return f"Added {med_name} {dosage} ({frequency}). Please confirm the schedule with your prescriber.";
+}
+
+
+def tool_log_dose_taken_from_chat(med_name: str) -> str {
+    profiles = [root --> UserProfile];
+    if len(profiles) == 0 {
+        return "Error: no user profile.";
+    }
+    p = profiles[0];
+    for med in [p --> Medication] {
+        if med.med_name.lower() == med_name.lower() and med.active {
+            log = DoseLog(
+                med_name=med.med_name,
+                timestamp=str(datetime.now()),
+                status="taken",
+                note=""
+            );
+            med ++> log;
+            return f"Logged {med.med_name} as taken at {tool_current_time()}.";
+        }
+    }
+    return f"I don't see {med_name} in your active medications.";
+}
+
+
+def tool_log_dose_skipped_from_chat(med_name: str, reason: str = "") -> str {
+    profiles = [root --> UserProfile];
+    if len(profiles) == 0 {
+        return "Error: no user profile.";
+    }
+    p = profiles[0];
+    for med in [p --> Medication] {
+        if med.med_name.lower() == med_name.lower() and med.active {
+            log = DoseLog(
+                med_name=med.med_name,
+                timestamp=str(datetime.now()),
+                status="skipped",
+                note=reason
+            );
+            med ++> log;
+            return f"Logged {med.med_name} as skipped. Try not to skip too often — talk to your prescriber if this is recurring.";
+        }
+    }
+    return f"I don't see {med_name} in your active medications.";
+}
+
+
+def tool_check_drug_interaction(drug_a: str, drug_b: str) -> str {
+    url = f"https://api.fda.gov/drug/label.json?search=drug_interactions:{drug_a}+AND+drug_interactions:{drug_b}&limit=1";
+    try {
+        resp = requests.get(url, timeout=5);
+        if resp.status_code == 200 {
+            data = resp.json();
+            results = data.get("results", []);
+            if len(results) > 0 {
+                interactions = results[0].get("drug_interactions", []);
+                if len(interactions) > 0 {
+                    snippet = str(interactions[0])[:500];
+                    return f"OpenFDA reports an interaction note between {drug_a} and {drug_b}: {snippet}. Verify with a pharmacist before changing anything.";
+                }
+            }
+        }
+    } except Exception as e {
+        return f"Couldn't reach OpenFDA right now. Please ask your pharmacist directly about {drug_a} + {drug_b}.";
+    }
+    return f"No interaction record found in OpenFDA for {drug_a} + {drug_b}. Absence of a record isn't proof of safety — confirm with your pharmacist.";
+}
+
+
+def tool_get_adherence_summary(days: int = 7) -> str {
+    profiles = [root --> UserProfile];
+    if len(profiles) == 0 {
+        return "Error: no user profile.";
+    }
+    p = profiles[0];
+    cutoff = datetime.now() - timedelta(days=days);
+    total_taken = 0;
+    total_expected = 0;
+    per_lines = [];
+    for med in [p --> Medication] {
+        if not med.active {
+            continue;
+        }
+        taken = 0;
+        for log in [med --> DoseLog] {
+            try {
+                ts = datetime.fromisoformat(log.timestamp);
+            } except Exception as e {
+                continue;
+            }
+            if ts >= cutoff and log.status == "taken" {
+                taken += 1;
+            }
+        }
+        expected = len(med.times) * days;
+        if med.frequency == "as_needed" {
+            expected = 0;
+        }
+        total_taken += taken;
+        total_expected += expected;
+        pct = 100.0 if expected == 0 else round(100.0 * taken / expected, 1);
+        per_lines.append(f"- {med.med_name}: {taken}/{expected} doses ({pct}%)");
+    }
+    if total_expected == 0 {
+        return "No tracked doses yet for the last " + str(days) + " days.";
+    }
+    overall = round(100.0 * total_taken / total_expected, 1);
+    header = f"Adherence over the last {days} days — {total_taken}/{total_expected} doses ({overall}% overall):";
+    return header + "\n" + "\n".join(per_lines);
+}
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Conversational medication agent (byLLM)
+# ───────────────────────────────────────────────────────────────────────────
+
+
+sem meddy_buddy = """
+You are MeddyBuddy, a warm and careful medication management assistant.
+
+What you help with:
+- Listing the user's current medications and schedule
+- Logging when a dose is taken or skipped
+- Computing recent adherence
+- Looking up potential drug interactions (OpenFDA, via tool)
+
+Hard rules:
+- You are NOT a doctor. Never diagnose, prescribe, or change dosages.
+- For any clinical question, recommend the user contact their clinician or pharmacist.
+- Never fabricate drug-interaction data. Only report what the interaction tool returns.
+- If asked to change a dose or stop a medication, politely refuse and redirect to the prescriber.
+- Keep replies short, warm, and practical. One short paragraph plus an action when relevant.
+- Use the available tools whenever the user is asking about THEIR specific regimen (don't guess).
+""";
+
+
+def meddy_buddy(message: str) -> str
+    by llm(
+        conversation=chat_history,
+        tools=[
+            tool_get_my_medications,
+            tool_add_medication_from_chat,
+            tool_log_dose_taken_from_chat,
+            tool_log_dose_skipped_from_chat,
+            tool_check_drug_interaction,
+            tool_get_adherence_summary,
+            tool_current_time
+        ],
+        temperature=0.7
+    );
+
+
+walker:pub meddy_chat {
+    has user_message: str;
+
+    can run with entry {
+        if self.user_message is None or self.user_message.strip() == "" {
+            report {"status": "error", "message": "Empty message"};
+            disengage;
+        }
+        try {
+            response = meddy_buddy(self.user_message);
+            report {"status": "ok", "response": response};
+        } except Exception as e {
+            report {"status": "error", "message": f"LLM error: {str(e)[:200]}"};
+        }
+    }
+}
+
+
+walker:pub clear_chat_history {
+    can run with entry {
+        chat_history.clear();
+        report {"status": "cleared"};
+    }
+}
+
+
 with entry {
     print("MeddyBuddyAI backend booting…");
+    print(f"LLM model: {_model_name}");
     print("API docs (auth required): http://localhost:8000/");
 }
