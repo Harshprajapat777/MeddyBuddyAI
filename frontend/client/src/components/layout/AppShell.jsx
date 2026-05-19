@@ -22,6 +22,7 @@ export default function AppShell({
   onboardingMode = false,
   onboardingCanFinish = false,
   onFinishOnboarding,
+  onNewChat,
   chatSuggestions,
   chatPlaceholder,
   onSignOut,
@@ -67,6 +68,7 @@ export default function AppShell({
             onboardingMode={onboardingMode}
             onboardingCanFinish={onboardingCanFinish}
             onFinishOnboarding={onFinishOnboarding}
+            onNewChat={onNewChat}
             suggestions={chatSuggestions}
             placeholder={chatPlaceholder}
           />

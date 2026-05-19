@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { Check, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, Sparkles, MessageSquarePlus, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import MessageBubble from "./MessageBubble";
 import TypingIndicator from "./TypingIndicator";
@@ -12,9 +12,21 @@ export default function ChatPanel({
   onboardingMode = false,
   onboardingCanFinish = false,
   onFinishOnboarding,
+  onNewChat,
   suggestions,
   placeholder,
 }) {
+  const [clearing, setClearing] = useState(false);
+
+  async function handleNewChat() {
+    if (!onNewChat || clearing) return;
+    setClearing(true);
+    try {
+      await onNewChat();
+    } finally {
+      setClearing(false);
+    }
+  }
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -25,10 +37,11 @@ export default function ChatPanel({
   return (
     <div className="flex-1 flex flex-col min-w-0">
       <div className="card !p-0 flex-1 flex flex-col overflow-hidden">
-        {/* Onboarding banner */}
-        <AnimatePresence>
-          {onboardingMode && (
+        {/* Onboarding banner (during setup) OR chat toolbar (after) */}
+        <AnimatePresence mode="wait">
+          {onboardingMode ? (
             <motion.div
+              key="onboarding-banner"
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
@@ -47,6 +60,33 @@ export default function ChatPanel({
                   className="shrink-0 inline-flex items-center gap-1 text-[11px] font-medium px-3 py-1 rounded-full bg-[var(--color-dark)] text-white hover:bg-[var(--color-dark-secondary)] transition-colors"
                 >
                   <Check size={11} /> I'm done
+                </button>
+              )}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="chat-toolbar"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="px-4 sm:px-5 py-2.5 border-b border-[var(--color-card-border)] flex items-center justify-between gap-3 bg-[var(--color-card)]/60"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-2 h-2 rounded-full bg-[var(--color-success)]" />
+                <span className="text-xs text-[var(--color-text-muted)] truncate">
+                  MeddyBuddy — Claude Sonnet 4.6
+                </span>
+              </div>
+              {onNewChat && (
+                <button
+                  type="button"
+                  onClick={handleNewChat}
+                  disabled={clearing || sending}
+                  className="shrink-0 inline-flex items-center gap-1.5 text-[11px] font-medium px-3 py-1 rounded-full bg-[var(--color-background)] border border-[var(--color-card-border)] text-[var(--color-text-muted)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent-hover)] transition-colors disabled:opacity-50"
+                  title="Start a fresh conversation"
+                >
+                  {clearing ? <Loader2 size={11} className="animate-spin" /> : <MessageSquarePlus size={11} />}
+                  New chat
                 </button>
               )}
             </motion.div>

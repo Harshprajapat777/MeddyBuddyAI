@@ -268,6 +268,14 @@ export default function App() {
     return api.sendReminder(med_name);
   }
 
+  // ─── New chat (clears server + client conversation state) ──────────────
+  async function handleNewChat() {
+    try { await api.clearChat(); } catch (_) {}
+    setMessages([WELCOME]);
+    // Refresh sidebar in case the previous conversation logged doses
+    await Promise.all([refreshMedications(), refreshHealthScore(), refreshAlerts()]);
+  }
+
   // ─── Render ────────────────────────────────────────────────────────────
   if (view === "landing") {
     return <Landing onGetStarted={handleGetStarted} onSignIn={handleSignInClick} />;
@@ -315,6 +323,7 @@ export default function App() {
         onLogSkipped={handleLogSkipped}
         onAddMedication={() => setAddOpen(true)}
         onSendReminder={handleSendReminder}
+        onNewChat={handleNewChat}
         onAcknowledgeAlert={handleAcknowledgeAlert}
         onRefreshAlerts={handleRefreshAlerts}
         onOpenWeeklyReport={handleOpenWeeklyReport}

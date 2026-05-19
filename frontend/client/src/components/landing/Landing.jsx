@@ -7,6 +7,10 @@ import {
   ArrowRight,
   ShieldCheck,
   ExternalLink,
+  UserPlus,
+  MessageCircle,
+  HeartHandshake,
+  Mail,
 } from "lucide-react";
 
 const FEATURES = [
@@ -24,6 +28,51 @@ const FEATURES = [
     icon: Bell,
     title: "Proactive alerts",
     body: "Notices when adherence drops and surfaces a small, specific next step — before the slip becomes a habit.",
+  },
+];
+
+const HOW_STEPS = [
+  {
+    icon: UserPlus,
+    n: "01",
+    title: "Meet your agent — no forms",
+    body:
+      "The moment you sign up, the onboarding agent says hello and asks for your first medication. You answer in your own words — \"Aspirin 81mg every morning\" — and it sets it up. One question at a time, conversational, never a 14-field form.",
+    sampleUser: "Aspirin 81mg every morning",
+    sampleAssistant:
+      "Got it ✅ — **Aspirin 81mg**, every morning. What's the next one, or is that everything?",
+  },
+  {
+    icon: MessageCircle,
+    n: "02",
+    title: "Chat naturally — the tools do the rest",
+    body:
+      "Tell MeddyBuddy what's going on. \"I just took my aspirin.\" \"Is ibuprofen safe with my metformin?\" \"How am I doing this week?\" The agent picks the right tool and replies with structured, sourced information.",
+    sampleUser: "I just took my aspirin",
+    sampleAssistant:
+      "Logged ✅ Aspirin marked **taken at 8:12 AM**. Your adherence is now 92%.",
+  },
+  {
+    icon: Bell,
+    n: "03",
+    title: "Get reminded — never miss a dose",
+    body:
+      "When a dose is due, MeddyBuddy emails you a styled reminder. Reply in the chat afterwards and the agent logs it. Your health score updates in real time, and the Digital Twin flags any med where adherence drops below 70%.",
+    sampleEmail: {
+      subject: "💊 Time for your Metformin 500mg",
+      preview: "Hi Sarah — just a gentle reminder, it's time for your 8 PM Metformin…",
+    },
+  },
+  {
+    icon: HeartHandshake,
+    n: "04",
+    title: "Keep your family in the loop",
+    body:
+      "Add a caregiver email in Settings and they get a polished weekly digest — your meds, score, trend, wins, risks — sent to their inbox. No app to download. Closes the family-care loop without surveillance.",
+    sampleEmail: {
+      subject: "MeddyBuddy · Sarah's weekly check-in",
+      preview: "Score 86 · Adherence 92% · 📈 improving · Aspirin: 95% adherence — strong consistency",
+    },
   },
 ];
 
@@ -59,6 +108,12 @@ export default function Landing({ onGetStarted, onSignIn }) {
           <span className="text-lg">MeddyBuddy</span>
         </div>
         <div className="flex items-center gap-2">
+          <a
+            href="#how-it-works"
+            className="hidden sm:inline-flex items-center px-3 py-1.5 rounded-full text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+          >
+            How it works
+          </a>
           <a
             href="https://github.com/Harshprajapat777/MeddyBuddyAI"
             target="_blank"
@@ -129,21 +184,85 @@ export default function Landing({ onGetStarted, onSignIn }) {
           ))}
         </div>
 
-        {/* Mini "how it works" strip */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5, duration: 0.6 }}
-          className="mt-16 lg:mt-20 flex flex-wrap items-center justify-center gap-3 sm:gap-5 text-sm text-[var(--color-text-muted)]"
-        >
-          <Step n={1} label="Sign up in a tap" />
-          <Divider />
-          <Step n={2} label="Tell MeddyBuddy your meds" />
-          <Divider />
-          <Step n={3} label="Chat naturally — log, ask, plan" />
-          <Divider />
-          <Step n={4} label="Get a weekly report" />
-        </motion.div>
+        {/* How it works — anchor target #how-it-works */}
+        <section id="how-it-works" className="mt-24 lg:mt-32 scroll-mt-20">
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.5 }}
+            className="text-center mb-12 lg:mb-16"
+          >
+            <span className="inline-block text-xs uppercase tracking-[0.2em] text-[var(--color-text-muted)] font-medium mb-3">
+              How it works
+            </span>
+            <h2 className="text-4xl sm:text-5xl text-[var(--color-text-primary)]">
+              An <em className="italic text-[var(--color-accent-hover)]">agent</em>, not just a tracker.
+            </h2>
+            <p className="mt-4 text-base text-[var(--color-text-muted)] max-w-xl mx-auto leading-relaxed">
+              Four moves the agent makes for you — from the first hello, to the email that lands in your family's inbox.
+            </p>
+          </motion.div>
+
+          <div className="space-y-6 lg:space-y-8 max-w-5xl mx-auto">
+            {HOW_STEPS.map((step, i) => {
+              const reverse = i % 2 === 1;
+              return (
+                <motion.div
+                  key={step.n}
+                  initial={{ opacity: 0, y: 16 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-50px" }}
+                  transition={{ duration: 0.5, delay: i * 0.05 }}
+                  className={`grid lg:grid-cols-2 gap-6 lg:gap-10 items-center ${reverse ? "lg:[&>*:first-child]:order-2" : ""}`}
+                >
+                  {/* Text side */}
+                  <div className={`${reverse ? "lg:pl-6" : "lg:pr-6"}`}>
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[var(--color-dark)] text-[var(--color-accent-light)]">
+                        <step.icon size={18} />
+                      </span>
+                      <span className="text-xs font-medium tracking-[0.15em] text-[var(--color-text-muted)]">
+                        STEP {step.n}
+                      </span>
+                    </div>
+                    <h3 className="text-2xl sm:text-3xl leading-tight text-[var(--color-text-primary)]">
+                      {step.title}
+                    </h3>
+                    <p className="mt-3 text-sm sm:text-base text-[var(--color-text-muted)] leading-relaxed">
+                      {step.body}
+                    </p>
+                  </div>
+
+                  {/* Visual side */}
+                  <div className="lg:max-w-md w-full mx-auto">
+                    {step.sampleUser ? (
+                      <ChatPreview user={step.sampleUser} assistant={step.sampleAssistant} />
+                    ) : step.sampleEmail ? (
+                      <EmailPreview subject={step.sampleEmail.subject} preview={step.sampleEmail.preview} />
+                    ) : null}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          {/* Closing CTA after how-it-works */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="mt-16 lg:mt-20 text-center"
+          >
+            <button type="button" onClick={onGetStarted} className="btn-primary">
+              Try it — set up your meds in 60 seconds <ArrowRight size={16} />
+            </button>
+            <p className="mt-3 text-xs text-[var(--color-text-muted)]">
+              No credit card. Backend on your machine. Stop the demo any time.
+            </p>
+          </motion.div>
+        </section>
       </main>
 
       {/* Footer */}
@@ -154,17 +273,54 @@ export default function Landing({ onGetStarted, onSignIn }) {
   );
 }
 
-function Step({ n, label }) {
+/* ─── How-it-works visuals ────────────────────────────────────────────── */
+
+function ChatPreview({ user, assistant }) {
   return (
-    <span className="inline-flex items-center gap-2">
-      <span className="w-6 h-6 rounded-full bg-[var(--color-dark)] text-white text-[11px] font-medium flex items-center justify-center">
-        {n}
-      </span>
-      <span>{label}</span>
-    </span>
+    <div className="card !p-4 space-y-3">
+      <div className="flex gap-2 justify-end">
+        <div className="max-w-[85%] rounded-2xl rounded-tr-md bg-[var(--color-dark)] text-white px-3 py-2 text-sm shadow-sm">
+          {user}
+        </div>
+      </div>
+      <div className="flex gap-2 items-start">
+        <div className="w-7 h-7 shrink-0 rounded-full bg-[var(--color-dark)] flex items-center justify-center mt-1">
+          <Pill size={12} className="text-[var(--color-accent-light)]" />
+        </div>
+        <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-[var(--color-card-assistant)] border border-[var(--color-card-border)] text-[var(--color-text-primary)] px-3 py-2 text-sm leading-snug">
+          {renderMarkdownLite(assistant)}
+        </div>
+      </div>
+    </div>
   );
 }
 
-function Divider() {
-  return <span className="hidden sm:inline w-6 h-px bg-[var(--color-card-border)]" />;
+function EmailPreview({ subject, preview }) {
+  return (
+    <div className="card !p-4">
+      <div className="flex items-center gap-2 mb-2.5 pb-2.5 border-b border-[var(--color-card-border)]">
+        <div className="w-7 h-7 rounded-full bg-[var(--color-accent-light)]/40 flex items-center justify-center">
+          <Mail size={13} className="text-[var(--color-accent-hover)]" />
+        </div>
+        <div className="text-xs text-[var(--color-text-muted)]">From: <span className="text-[var(--color-text-primary)]">MeddyBuddy</span></div>
+      </div>
+      <p className="text-sm font-medium text-[var(--color-text-primary)] leading-snug">{subject}</p>
+      <p className="text-xs text-[var(--color-text-muted)] mt-1.5 leading-relaxed">{preview}</p>
+      <div className="mt-3 inline-flex items-center gap-1 text-[10px] text-[var(--color-text-muted)] bg-[var(--color-background)] border border-[var(--color-card-border)] rounded-full px-2 py-0.5">
+        via Brevo
+      </div>
+    </div>
+  );
+}
+
+/* very small markdown subset — bold only — to avoid a full markdown
+   dependency tree for the landing previews */
+function renderMarkdownLite(text) {
+  if (!text) return null;
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((p, i) =>
+    p.startsWith("**") && p.endsWith("**")
+      ? <strong key={i} className="text-[var(--color-accent-hover)]">{p.slice(2, -2)}</strong>
+      : <span key={i}>{p}</span>
+  );
 }
