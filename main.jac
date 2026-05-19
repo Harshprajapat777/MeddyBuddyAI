@@ -568,7 +568,27 @@ def tool_get_my_medications() -> str {
 }
 
 
-def tool_add_medication_from_chat(med_name: str, dosage: str, frequency: str = "daily") -> str {
+sem tool_add_medication_from_chat = """
+Add a new medication for the user. Call this whenever the user
+describes a med (name + dose + when to take it).
+
+IMPORTANT — `times` is a LIST of 24-hour clock strings and you MUST
+pass every clock time the user mentioned:
+  - "every morning"      → times=["08:00"]
+  - "8am and 8pm"        → times=["08:00", "20:00"]
+  - "morning, noon, night" → times=["08:00", "12:00", "20:00"]
+Do not rely on the default — explicitly pass the list. Use frequency
+to label the cadence (daily / twice_daily / three_times_daily /
+as_needed / weekly).
+""";
+
+
+def tool_add_medication_from_chat(
+    med_name: str,
+    dosage: str,
+    frequency: str = "daily",
+    times: list[str] = ["08:00"]
+) -> str {
     profiles = [root --> UserProfile];
     if len(profiles) == 0 {
         return "Error: no user profile yet.";
@@ -582,16 +602,22 @@ def tool_add_medication_from_chat(med_name: str, dosage: str, frequency: str = "
             return f"{med_name} is already in your active medications.";
         }
     }
+    # Defensive default if the LLM forgets to pass times.
+    safe_times = times;
+    if safe_times is None or len(safe_times) == 0 {
+        safe_times = ["08:00"];
+    }
     med = Medication(
         med_name=med_name,
         dosage=dosage,
         frequency=frequency,
-        times=["08:00"],
+        times=safe_times,
         active=True,
         added_at=str(datetime.now())
     );
     p ++> med;
-    return f"Added {med_name} {dosage} ({frequency}). Please confirm the schedule with your prescriber.";
+    times_str = ", ".join(safe_times);
+    return f"Added {med_name} {dosage} ({frequency}) at {times_str}. Please confirm the schedule with your prescriber.";
 }
 
 
@@ -801,10 +827,15 @@ Conversation rules:
   (name, dose, and when they take it).
 - ONE focused question at a time. Never dump a long form on them.
 - Once you have name + dose + timing for a medication, call
-  tool_add_medication_from_chat with sensible values for frequency and
-  times. Pick the frequency from: "daily", "twice_daily",
-  "three_times_daily", "as_needed", "weekly". Pick times in 24h format
-  like "08:00".
+  tool_add_medication_from_chat. Pick the frequency from: "daily",
+  "twice_daily", "three_times_daily", "as_needed", "weekly".
+- The `times` argument is a LIST of 24-hour strings — ALWAYS pass
+  every time the user mentioned. Examples:
+    · "8am and 8pm" → times=["08:00", "20:00"], frequency="twice_daily"
+    · "morning, noon and night" → times=["08:00", "12:00", "20:00"],
+      frequency="three_times_daily"
+    · "every morning" → times=["08:00"], frequency="daily"
+  Never drop a time the user explicitly mentioned.
 - If something is missing, ask only for the missing piece.
 - After each addition, briefly confirm what you saved and ask "what's
   the next one, or is that everything?" Let the user lead.
