@@ -230,9 +230,61 @@ MeddyBuddyAI/
 ├── .gitignore
 ├── FEATURES.md           ← original v1 feature spec
 ├── todobackend.md        ← full Phase-1/Phase-2 build plan, hour-by-hour
+├── api.md                ← endpoint reference for the React client
 ├── README.md             ← (this file)
-└── jac/                  ← internal Jac reference notes (study material)
+├── jac/                  ← internal Jac reference notes (study material)
+└── frontend/
+    └── client/           ← React 19 + Vite + Tailwind v4 single-page app
+        ├── src/
+        │   ├── api/client.js                   ← Bearer-token API client
+        │   ├── components/
+        │   │   ├── auth/AuthScreen.jsx         ← login / register
+        │   │   ├── layout/                     ← Header, Sidebar, AppShell
+        │   │   ├── chat/                       ← ChatPanel, MessageBubble, MessageInput
+        │   │   ├── medications/                ← MedicationList, AddMedicationModal
+        │   │   └── twin/                       ← HealthScoreCard, AlertsInbox, WeeklyReportModal
+        │   ├── App.jsx
+        │   └── index.css                       ← Tailwind v4 + warm earthy palette
+        ├── package.json
+        └── vite.config.js
 ```
+
+## Running the full stack
+
+You need **two terminals** — backend (Jac) and frontend (Vite).
+
+### Terminal 1 — backend
+
+```powershell
+cd MeddyBuddyAI
+.\jac-env\Scripts\Activate.ps1            # if you haven't yet
+$env:PYTHONIOENCODING="utf-8"; $env:PYTHONUTF8="1"
+python -m jaclang start main.jac --port 8000
+```
+
+Backend on `http://localhost:8000` — Bearer-token auth, CORS enabled for the Vite dev server.
+
+### Terminal 2 — frontend
+
+```powershell
+cd MeddyBuddyAI\frontend\client
+npm install                                # first time only
+npm run dev
+```
+
+Frontend on `http://localhost:5173`. Open it, hit **Create account**, pick any username + password, and you're in. The app fetches your meds, alerts, and health score on mount, and every chat message goes to the live Claude Sonnet 4.6 agent.
+
+### Frontend tech stack
+
+| Layer | Choice |
+|-------|--------|
+| Build | Vite 8, React 19 |
+| Styling | Tailwind CSS v4 (Instrument Serif + DM Sans, warm earthy palette) |
+| Animation | Framer Motion |
+| Markdown | `react-markdown` + `remark-gfm` (for LLM chat responses and weekly reports) |
+| Icons | Lucide React |
+| State | React `useState` + `localStorage` (token persisted across refreshes) |
+| API | `src/api/client.js` — small fetch wrapper that handles the response envelope and Bearer auth |
 
 `main.jac` is intentionally single-file. We tried a multi-file `models/`+`walkers/` layout first, but `cl import from "./file.jac"` registers walkers as client-side only (not as server REST endpoints). Single-file is the working path for `jac start` until Jac picks up proper Python-package-style imports.
 

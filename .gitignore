@@ -14,3 +14,9 @@ data/uploads/
 data/embeddings.pkl
 .jaseci_logs/
 
+# Frontend
+frontend/client/dist/
+frontend/client/.vite/
+frontend/client/.env
+frontend/client/.env.local
+
