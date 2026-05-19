@@ -35,24 +35,32 @@ You → "I just took my aspirin"
 
 ## Agents that actually do things
 
-The submission focuses on **5 agentic capabilities**, each implemented as a clean Jac construct:
+The submission focuses on **7 agentic capabilities**, each implemented as a clean Jac construct:
 
-### 1. Conversational medication agent (`meddy_chat`)
+### 1. Conversational onboarding agent (`onboarding_chat`)
+The moment a user signs up, a **dedicated** byLLM agent (`meddy_onboarder`, its own `glob onboarding_history`) walks them through adding their medications in plain English — one question at a time, no forms. The agent calls `tool_add_medication_from_chat` with structured arguments (`med_name`, `dosage`, `frequency`, `times[]`) parsed from natural phrases like *"Metformin 500mg, 8am and 8pm"*. When the user says *"that's all"*, it warmly hands off to the main chat.
+
+### 2. Conversational medication agent (`meddy_chat`)
 A `walker:pub` that wraps `meddy_buddy(message)`, a byLLM function with `conversation=chat_history` (multi-turn memory) and `tools=[…7 tools…]`. The LLM picks tools — `tool_get_my_medications`, `tool_add_medication_from_chat`, `tool_log_dose_taken_from_chat`, `tool_log_dose_skipped_from_chat`, `tool_check_drug_interaction` (OpenFDA), `tool_get_adherence_summary`, `tool_current_time` — and the tools read/write the user's graph directly.
 
-### 2. Medication CRUD walkers
+### 3. Medication CRUD walkers
 `init_user`, `get_profile`, `update_profile`, `add_medication`, `get_medications`, `log_dose`, `get_dose_history`, `deactivate_medication`, `get_adherence`. Same data the agent uses, exposed as plain REST so a frontend can drive the graph without going through chat.
 
-### 3. Digital Health Twin (the differentiator)
+### 4. Digital Health Twin (the differentiator)
 - `health_score` → 0–100 score with trend vs prior week, per-medication top risks, wins.
 - `generate_alerts` → reads risks from the score function, attaches them as `Alert` nodes — duplicate-guarded.
 - `get_alerts` / `acknowledge_alert` → manage the alert inbox.
 - `weekly_report` → structured report **plus** a byLLM-generated natural-language summary, framed by a strict `sem` prompt that leads with the headline number, acknowledges wins before risks, ends with one actionable step, and never diagnoses.
 
-### 4. Drug-interaction tool
+### 5. Proactive email layer (Brevo)
+- `send_test_email` → sanity-check the wiring.
+- `send_reminder(med_name)` → sends a styled HTML reminder for a specific med to the user's profile email, writes a `NotificationLog` node for the audit trail.
+- `send_caregiver_digest` → sends the polished weekly digest (score, adherence table, trend, wins, risks) to the `caregiver_email` set on the profile — closes the family-care loop without surveillance.
+
+### 6. Drug-interaction tool
 `tool_check_drug_interaction(a, b)` hits the OpenFDA drug-label API and returns the interaction snippet — or a safe "ask your pharmacist" fallback. Wired into the conversational agent so the user can ask "is ibuprofen safe with metformin?" and get a real reference, never a fabrication.
 
-### 5. Safety rails (cross-cutting)
+### 7. Safety rails (cross-cutting)
 Every byLLM call is gated by a `sem` block:
 - Never diagnose, prescribe, or change dosages.
 - Never fabricate interactions — only report what OpenFDA returns.
@@ -65,9 +73,10 @@ Every byLLM call is gated by a `sem` block:
 
 ### Prerequisites
 - **Python 3.12+** (jaclang requires `typing.override` which only exists in 3.12+)
+- **Node 20+** for the React frontend
 - Windows 11 (tested), Mac, or Linux
 - An `ANTHROPIC_API_KEY` (Claude Sonnet 4.6) — required for chat + weekly report
-- *Optional:* `BREVO_API_KEY` for reminder emails (Phase 2)
+- A `BREVO_API_KEY` — required for the reminder + caregiver-digest demo flow
 
 ### Install
 
@@ -79,10 +88,27 @@ python -m venv jac-env
 ./jac-env/Scripts/activate    # PowerShell:  .\jac-env\Scripts\Activate.ps1
 pip install jaclang byllm python-dotenv requests
 
-# Add your API key
+# Add your API keys
 copy .env.example .env
-# Edit .env and set ANTHROPIC_API_KEY=sk-ant-...
+# Edit .env — see "Brevo setup" below for the email keys
 ```
+
+### Brevo setup (so the reminder + caregiver emails actually fire)
+
+1. Sign up at [brevo.com](https://brevo.com) → free tier gives you 300 emails/day forever.
+2. **Settings → Senders, Domains & Dedicated IPs** → add and verify the sender email you want emails to come from (e.g. `meddybuddy@yourdomain.com`). Brevo will send you a confirmation email.
+3. **Settings → SMTP & API → API Keys** → click *Generate a new API key*, copy it.
+4. Paste into `.env`:
+   ```env
+   ANTHROPIC_API_KEY=sk-ant-...
+   BREVO_API_KEY=xkeysib-...
+   BREVO_SENDER_EMAIL=meddybuddy@yourdomain.com   # must match what you verified
+   BREVO_SENDER_NAME=MeddyBuddy
+   ```
+5. Restart `jac start main.jac` so dotenv picks up the new vars.
+6. Sanity check: in the app, open Settings → *Send test email*. It should land in the user's inbox in ~5 seconds.
+
+If you don't add the Brevo key, every email walker fails gracefully with `"BREVO_API_KEY not set in .env"` — the UI displays the error inline. Chat, CRUD, and the Digital Twin keep working.
 
 ### Run
 
@@ -97,7 +123,7 @@ The server prints every endpoint at startup. The full set is also generated by `
 
 ```powershell
 python -m jaclang start main.jac --faux
-# → TOTAL: 20 functions × 14 walkers × 0 client functions × 84 endpoints
+# → TOTAL: 25 functions × 21 walkers × 0 client functions × 98 endpoints
 ```
 
 ---
@@ -200,22 +226,27 @@ curl -X POST http://localhost:8000/walker/weekly_report \
 |----------|------|--------------|
 | `POST /user/register` | `{identities, credential}` | Create account, return Bearer token |
 | `POST /user/login` | `{identity, credential}` | Login, return Bearer token |
-| `POST /walker/init_user` | `{user_name?, email?}` | Create UserProfile (idempotent) |
-| `POST /walker/get_profile` | `{}` | Return user profile |
-| `POST /walker/update_profile` | `{email?, timezone?, sleep_time?, wake_time?}` | Partial profile update |
-| `POST /walker/add_medication` | `{med_name, dosage, frequency?, times?}` | Attach a Medication |
+| `POST /walker/init_user` | `{user_name?, email?, timezone?}` | Create UserProfile (idempotent) |
+| `POST /walker/get_profile` | `{}` | Return user profile (incl. `caregiver_email`) |
+| `POST /walker/update_profile` | `{email?, caregiver_email?, timezone?, sleep_time?, wake_time?}` | Partial profile update |
+| `POST /walker/add_medication` | `{med_name, dosage, frequency?, times?, notes?}` | Attach a Medication |
 | `POST /walker/get_medications` | `{include_inactive?}` | List meds |
 | `POST /walker/log_dose` | `{med_name, status, note?}` | Append a DoseLog |
 | `POST /walker/get_dose_history` | `{med_name?, limit?}` | Recent dose log |
 | `POST /walker/deactivate_medication` | `{med_name}` | Soft-delete a med |
 | `POST /walker/get_adherence` | `{med_name?, days?}` | Adherence breakdown |
-| `POST /walker/meddy_chat` | `{user_message}` | Conversational agent |
-| `POST /walker/clear_chat_history` | `{}` | Reset conversation memory |
+| `POST /walker/meddy_chat` | `{user_message}` | Main conversational agent |
+| `POST /walker/clear_chat_history` | `{}` | Reset main-chat memory |
+| `POST /walker/onboarding_chat` | `{user_message}` | Dedicated first-time setup agent |
+| `POST /walker/clear_onboarding_history` | `{}` | Reset onboarding-agent memory |
 | `POST /walker/health_score` | `{}` | 0–100 Digital Twin score |
 | `POST /walker/get_alerts` | `{include_acknowledged?}` | Alert inbox |
 | `POST /walker/generate_alerts` | `{}` | Refresh proactive alerts |
 | `POST /walker/acknowledge_alert` | `{alert_id}` | Resolve an alert |
 | `POST /walker/weekly_report` | `{}` | Structured + LLM-narrated weekly report |
+| `POST /walker/send_test_email` | `{to_email?}` | Send a sanity-check Brevo email |
+| `POST /walker/send_reminder` | `{med_name}` | Email a styled dose reminder to the user |
+| `POST /walker/send_caregiver_digest` | `{}` | Email the polished weekly digest to `caregiver_email` |
 
 ---
 
