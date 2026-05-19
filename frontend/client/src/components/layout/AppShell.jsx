@@ -33,6 +33,8 @@ export default function AppShell({
   onRefreshAlerts,
   onOpenWeeklyReport,
   onCloseWeeklyReport,
+  onOpenSettings,
+  onSendToCaregiver,
 }) {
   return (
     <div className="min-h-screen bg-[var(--color-background)] flex flex-col">
@@ -40,6 +42,7 @@ export default function AppShell({
         username={profile?.name ?? username}
         onSignOut={onSignOut}
         onOpenWeeklyReport={onOpenWeeklyReport}
+        onOpenSettings={onOpenSettings}
       />
 
       <main className="flex-1 container-max w-full px-4 sm:px-6 lg:px-8 py-6">
@@ -73,6 +76,8 @@ export default function AppShell({
         report={weeklyReport}
         loading={weeklyReportLoading}
         onClose={onCloseWeeklyReport}
+        caregiverEmail={profile?.caregiver_email}
+        onSendToCaregiver={onSendToCaregiver}
       />
     </div>
   );

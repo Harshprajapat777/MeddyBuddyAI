@@ -124,6 +124,14 @@ export const api = {
   acknowledgeAlert: (alert_id) =>
     request("/walker/acknowledge_alert", { alert_id }),
   weeklyReport: () => request("/walker/weekly_report", {}),
+
+  // ─── Brevo email layer (proactive reminders + caregiver digest) ────────
+  sendTestEmail: (to_email = "") =>
+    request("/walker/send_test_email", { to_email }),
+  sendReminder: (med_name) =>
+    request("/walker/send_reminder", { med_name }),
+  sendCaregiverDigest: () =>
+    request("/walker/send_caregiver_digest", {}),
 };
 
 export { ApiError };

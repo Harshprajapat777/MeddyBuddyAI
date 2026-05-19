@@ -1,4 +1,5 @@
-import { X, TrendingUp, TrendingDown, Minus, Sparkles, AlertTriangle, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, TrendingUp, TrendingDown, Minus, Sparkles, AlertTriangle, Loader2, Send, Check } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -9,7 +10,33 @@ function trendIcon(t) {
   return <Minus size={14} />;
 }
 
-export default function WeeklyReportModal({ open, report, loading, onClose }) {
+export default function WeeklyReportModal({ open, report, loading, onClose, onSendToCaregiver, caregiverEmail }) {
+  const [sending, setSending] = useState(false);
+  const [sendStatus, setSendStatus] = useState({ state: "idle", text: "" });
+
+  useEffect(() => {
+    if (!open) setSendStatus({ state: "idle", text: "" });
+  }, [open]);
+
+  async function handleSendToCaregiver() {
+    if (!onSendToCaregiver) return;
+    setSending(true);
+    setSendStatus({ state: "sending", text: "" });
+    try {
+      const r = await onSendToCaregiver();
+      const ok = r?.status === "sent" || r?.result?.ok;
+      setSendStatus({
+        state: ok ? "ok" : "error",
+        text: ok
+          ? `Sent to ${r?.to_email ?? caregiverEmail ?? "caregiver"}`
+          : r?.detail?.error ?? r?.message ?? "Send failed",
+      });
+    } catch (err) {
+      setSendStatus({ state: "error", text: err?.message ?? "Send failed" });
+    } finally {
+      setSending(false);
+    }
+  }
   return (
     <AnimatePresence>
       {open && (
@@ -96,6 +123,35 @@ export default function WeeklyReportModal({ open, report, loading, onClose }) {
                 </>
               )}
             </div>
+
+            {!loading && report && (
+              <footer className="flex items-center justify-between gap-3 p-4 border-t border-[var(--color-card-border)] bg-[var(--color-background)]/60">
+                <div className="text-[12px] text-[var(--color-text-muted)] leading-snug min-w-0">
+                  {caregiverEmail
+                    ? <>Send this digest to <span className="text-[var(--color-text-primary)]">{caregiverEmail}</span>.</>
+                    : <>Add a caregiver email in settings to share this digest.</>}
+                  {sendStatus.text && (
+                    <span className={`block mt-0.5 ${
+                      sendStatus.state === "ok" ? "text-[var(--color-success)]" :
+                      sendStatus.state === "error" ? "text-[var(--color-error)]" :
+                      "text-[var(--color-text-muted)]"
+                    }`}>
+                      {sendStatus.state === "ok" ? `✓ ${sendStatus.text}` : sendStatus.text}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSendToCaregiver}
+                  disabled={!caregiverEmail || sending || sendStatus.state === "ok"}
+                  className="btn-primary !py-2 !px-4 text-sm shrink-0"
+                >
+                  {sending ? <Loader2 size={14} className="animate-spin" /> :
+                    sendStatus.state === "ok" ? <Check size={14} /> : <Send size={14} />}
+                  {sending ? "Sending…" : sendStatus.state === "ok" ? "Sent" : "Send to caregiver"}
+                </button>
+              </footer>
+            )}
           </motion.div>
         </motion.div>
       )}

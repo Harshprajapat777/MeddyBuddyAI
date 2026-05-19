@@ -1,7 +1,7 @@
-import { Pill, LogOut, FileText } from "lucide-react";
+import { Pill, LogOut, FileText, Settings } from "lucide-react";
 import { motion } from "framer-motion";
 
-export default function Header({ username, onSignOut, onOpenWeeklyReport }) {
+export default function Header({ username, onSignOut, onOpenWeeklyReport, onOpenSettings }) {
   return (
     <header className="sticky top-0 z-20 bg-[var(--color-background)]/85 backdrop-blur-md border-b border-[var(--color-card-border)]">
       <div className="container-max px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -32,12 +32,26 @@ export default function Header({ username, onSignOut, onOpenWeeklyReport }) {
             <span className="hidden sm:inline">Weekly report</span>
           </button>
 
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--color-card)] border border-[var(--color-card-border)]">
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--color-card)] border border-[var(--color-card-border)] hover:border-[var(--color-accent)] transition-colors"
+            title="Settings"
+          >
             <div className="w-7 h-7 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-white text-xs font-semibold">
               {(username || "U").charAt(0).toUpperCase()}
             </div>
             <span className="text-sm font-medium text-[var(--color-text-primary)]">{username}</span>
-          </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="sm:hidden p-2 rounded-full text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-card)] transition-colors"
+            title="Settings"
+          >
+            <Settings size={18} />
+          </button>
 
           <button
             type="button"

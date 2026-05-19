@@ -3,6 +3,7 @@ import Landing from "./components/landing/Landing";
 import AuthScreen from "./components/auth/AuthScreen";
 import AppShell from "./components/layout/AppShell";
 import AddMedicationModal from "./components/medications/AddMedicationModal";
+import SettingsModal from "./components/settings/SettingsModal";
 import { api, getToken, setToken, clearToken } from "./api/client";
 
 const WELCOME = {
@@ -45,6 +46,9 @@ export default function App() {
   // Medications
   const [medications, setMedications] = useState([]);
   const [addOpen, setAddOpen] = useState(false);
+
+  // Settings
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Chat
   const [messages, setMessages] = useState([WELCOME]);
@@ -246,6 +250,21 @@ export default function App() {
   }
   function handleCloseWeeklyReport() { setWeeklyReportOpen(false); }
 
+  // ─── Settings + Brevo actions ──────────────────────────────────────────
+  async function handleSaveSettings(patch) {
+    await api.updateProfile(patch);
+    try {
+      const p = await api.getProfile();
+      if (p && !p.status) setProfile(p);
+    } catch (_) {}
+  }
+  async function handleSendTestEmail() {
+    return api.sendTestEmail();
+  }
+  async function handleSendCaregiverDigest() {
+    return api.sendCaregiverDigest();
+  }
+
   // ─── Render ────────────────────────────────────────────────────────────
   if (view === "landing") {
     return <Landing onGetStarted={handleGetStarted} onSignIn={handleSignInClick} />;
@@ -296,11 +315,20 @@ export default function App() {
         onRefreshAlerts={handleRefreshAlerts}
         onOpenWeeklyReport={handleOpenWeeklyReport}
         onCloseWeeklyReport={handleCloseWeeklyReport}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onSendToCaregiver={handleSendCaregiverDigest}
       />
       <AddMedicationModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onSubmit={handleSubmitNewMedication}
+      />
+      <SettingsModal
+        open={settingsOpen}
+        profile={profile}
+        onClose={() => setSettingsOpen(false)}
+        onSave={handleSaveSettings}
+        onSendTestEmail={handleSendTestEmail}
       />
     </>
   );
