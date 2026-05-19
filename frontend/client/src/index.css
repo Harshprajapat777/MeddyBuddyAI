@@ -1,0 +1,186 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-background:    #FAF7F2;
+  --color-dark:          #1A1210;
+  --color-dark-secondary:#2D2016;
+  --color-text-primary:  #2D2016;
+  --color-text-muted:    #8B7355;
+  --color-accent:        #C4956A;
+  --color-accent-hover:  #B8845A;
+  --color-accent-light:  #D4A87A;
+  --color-card:          #FFFFFF;
+  --color-card-border:   #E8E0D4;
+  --color-card-assistant:#FFFDF9;
+  --color-success:       #16A34A;
+  --color-error:         #DC2626;
+
+  --font-sans:    "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  --font-serif:   "Instrument Serif", Georgia, "Times New Roman", serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv01";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
+}
+
+/* ─── Reusable component classes ─────────────────────────────────────────── */
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full
+           bg-[var(--color-accent)] text-white font-medium
+           hover:bg-[var(--color-accent-hover)]
+           focus:ring-2 focus:ring-[var(--color-accent)]/50 focus:outline-none
+           transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed
+           shadow-sm hover:shadow-md;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full
+           bg-transparent border border-[var(--color-card-border)]
+           text-[var(--color-text-primary)] font-medium
+           hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]
+           focus:ring-2 focus:ring-[var(--color-accent)]/50 focus:outline-none
+           transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-dark {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full
+           bg-[var(--color-dark)] text-white font-medium
+           hover:bg-[var(--color-dark-secondary)]
+           focus:ring-2 focus:ring-[var(--color-dark)]/40 focus:outline-none
+           transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-outline-light {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full
+           bg-transparent border border-white/40 text-white font-medium
+           hover:bg-white/10 hover:border-white/70
+           focus:ring-2 focus:ring-white/40 focus:outline-none
+           transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .card {
+    @apply bg-[var(--color-card)] border border-[var(--color-card-border)]
+           rounded-2xl p-6 shadow-sm;
+  }
+
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10
+           rounded-2xl p-6 shadow-md;
+  }
+
+  .section-padding {
+    @apply px-4 sm:px-6 lg:px-8 py-20 lg:py-28;
+  }
+
+  .container-max {
+    @apply max-w-7xl mx-auto;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-2.5 rounded-full bg-[var(--color-card)]
+           border border-[var(--color-card-border)]
+           text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)]/70
+           outline-none transition-all duration-200
+           focus:ring-2 focus:ring-[var(--color-accent)]/40
+           focus:border-[var(--color-accent)];
+  }
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────── */
+*::-webkit-scrollbar         { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track   { background: transparent; }
+*::-webkit-scrollbar-thumb   { background: var(--color-card-border); border-radius: 4px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--color-accent-light); }
+
+/* ─── Markdown content (for LLM responses) ───────────────────────────────── */
+.prose-llm h1, .prose-llm h2, .prose-llm h3 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  margin: 0.5rem 0 0.25rem;
+  color: var(--color-text-primary);
+}
+.prose-llm p {
+  margin: 0.4rem 0;
+  line-height: 1.6;
+}
+.prose-llm ul, .prose-llm ol {
+  margin: 0.4rem 0;
+  padding-left: 1.25rem;
+}
+.prose-llm li { margin: 0.15rem 0; }
+.prose-llm code {
+  background: rgba(196, 149, 106, 0.15);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.875em;
+  color: var(--color-text-primary);
+}
+.prose-llm pre {
+  background: var(--color-background);
+  padding: 0.75rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  border: 1px solid var(--color-card-border);
+}
+.prose-llm strong { color: var(--color-accent-hover); font-weight: 600; }
+.prose-llm table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+  font-size: 0.9em;
+}
+.prose-llm th, .prose-llm td {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-card-border);
+  text-align: left;
+}
+.prose-llm th {
+  background: var(--color-background);
+  font-weight: 600;
+}
+.prose-llm hr {
+  margin: 0.75rem 0;
+  border: none;
+  border-top: 1px solid var(--color-card-border);
+}
+.prose-llm a {
+  color: var(--color-accent-hover);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+/* ─── Animations ─────────────────────────────────────────────────────────── */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%      { transform: translateY(-12px); }
+}
+.animate-float       { animation: float 7s ease-in-out infinite; }
+.animate-float-slow  { animation: float 9s ease-in-out infinite; }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.35; transform: translateY(0px); }
+  50%      { opacity: 1;    transform: translateY(-2px); }
+}
+.dot-typing > span { animation: pulse-dot 1.4s infinite ease-in-out; }
+.dot-typing > span:nth-child(2) { animation-delay: 0.2s; }
+.dot-typing > span:nth-child(3) { animation-delay: 0.4s; }
